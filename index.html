@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Factory Fair Shop POS (Firebase Realtime Sync)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Firebase App SDK (Modular v10 CDN) -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getDatabase, ref, set, get, update, remove, onValue, push, child } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+
+    // Firebase Configuration using your provided Realtime Database URL
+    const firebaseConfig = {
+      databaseURL: "https://fair-shop-3a00c-default-rtdb.firebaseio.com/"
+    };
+
+    // Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    // Make database functions globally accessible
+    window.dbRefs = { db, ref, set, get, update, remove, onValue, push, child };
+    window.initializeAppReady();
+  </script>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col font-sans">
+
+  <!-- TOP NAVIGATION BAR -->
+  <header class="bg-slate-800 border-b border-slate-700 px-6 py-3 flex flex-wrap justify-between items-center gap-4">
+    <div class="flex items-center gap-3">
+      <span class="bg-emerald-600 text-white font-extrabold px-3 py-1.5 rounded text-sm">FIREBASE POS</span>
+      <div>
+        <h1 class="font-bold text-base leading-tight">Factory Fair Price Shop (Realtime)</h1>
+        <p class="text-xs text-emerald-400 font-semibold" id="syncStatus">Connecting to Firebase Cloud...</p>
+      </div>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <nav class="flex gap-2">
+      <button onclick="switchTab('pos')" id="tab-pos" class="px-4 py-2 rounded text-sm font-semibold bg-emerald-600 text-white">1. POS Counter</button>
+      <button onclick="switchTab('employees')" id="tab-employees" class="px-4 py-2 rounded text-sm font-semibold bg-slate-700 text-slate-300">2. Employee Master</button>
+      <button onclick="switchTab('products')" id="tab-products" class="px-4 py-2 rounded text-sm font-semibold bg-slate-700 text-slate-300">3. Product & Stock</button>
+      <button onclick="switchTab('reports')" id="tab-reports" class="px-4 py-2 rounded text-sm font-semibold bg-slate-700 text-slate-300">4. Sales Ledger</button>
+    </nav>
+  </header>
+
+  <!-- TAB 1: POS BILLING COUNTER -->
+  <main id="view-pos" class="flex-1 grid grid-cols-12 gap-4 p-4">
+    <section class="col-span-12 lg:col-span-8 bg-slate-800 rounded-lg border border-slate-700 flex flex-col justify-between p-4">
+      <div>
+        <div class="grid grid-cols-12 gap-2 mb-4 bg-slate-900 p-3 rounded border border-slate-700">
+          <div class="col-span-5">
+            <label class="text-xs text-slate-400 uppercase block mb-1">Scan Barcode (Enter)</label>
+            <input id="posBarcodeInput" type="text" placeholder="Scan barcode..." onkeydown="if(event.key==='Enter') scanBarcode()"
+                   class="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-white">
+          </div>
+          <div class="col-span-5">
+            <label class="text-xs text-slate-400 uppercase block mb-1">Or Select Product</label>
+            <select id="posProductSelect" class="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-white"></select>
+          </div>
+          <div class="col-span-2 flex items-end">
+            <button onclick="addSelectedProduct()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 rounded text-sm">+ Add</button>
+          </div>
+        </div>
+
+        <div class="overflow-x-auto max-h-96">
+          <table class="w-full text-left border-collapse text-sm">
+            <thead>
+              <tr class="border-b border-slate-700 text-slate-400 text-xs uppercase">
+                <th class="py-2">#</th>
+                <th class="py-2">Barcode</th>
+                <th class="py-2">Item Name</th>
+                <th class="py-2">Fair Price</th>
+                <th class="py-2 text-center">Qty</th>
+                <th class="py-2 text-right">Subtotal</th>
+                <th class="py-2 text-center">Action</th>
+              </tr>
+            </thead>
+            <tbody id="posCartBody" class="divide-y divide-slate-700/60"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="posStatusBanner" class="mt-4 p-4 rounded bg-slate-900 border border-slate-700 flex justify-between items-center">
+        <span id="posStatusText" class="text-sm font-semibold text-slate-300">Scan Employee ID to begin billing.</span>
+        <div class="text-right">
+          <span class="text-xs text-slate-400 uppercase block">Current Invoice Total</span>
+          <span id="posCartTotal" class="text-2xl font-extrabold text-white">৳ 0.00</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="col-span-12 lg:col-span-4 flex flex-col gap-4">
+      <div class="bg-slate-800 rounded-lg border border-slate-700 p-4">
+        <label class="text-xs text-slate-400 uppercase font-bold block mb-1">Tap RFID / Enter Employee ID</label>
+        <div class="flex gap-2 mb-3">
+          <input id="posEmpInput" type="text" placeholder="EMP-101" onkeydown="if(event.key==='Enter') lookupPosEmployee()"
+                 class="flex-1 bg-slate-900 border border-emerald-500 rounded px-3 py-2 text-sm font-mono text-white">
+          <button onclick="lookupPosEmployee()" class="bg-emerald-600 hover:bg-emerald-500 px-4 py-2 rounded font-bold text-sm">Load</button>
+        </div>
+        <select id="posEmpDropdown" onchange="selectPosEmployeeDropdown(this.value)" class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-xs text-slate-300 mb-3"></select>
+
+        <div class="bg-slate-900 p-3 rounded border border-slate-700">
+          <div class="flex justify-between items-center">
+            <h3 id="posEmpName" class="font-bold text-base text-white">No Employee Loaded</h3>
+            <span id="posEmpStatus" class="text-xs px-2 py-0.5 rounded bg-slate-700 text-slate-300">WAITING</span>
+          </div>
+          <p id="posEmpMeta" class="text-xs text-slate-400 mt-1">Realtime Firebase balance check</p>
+        </div>
+      </div>
+
+      <div class="bg-slate-800 rounded-lg border border-slate-700 p-4 flex-1 flex flex-col justify-between">
+        <div>
+          <h4 class="text-xs font-bold uppercase text-slate-400 tracking-wider mb-3">30% Gross Salary Credit Meter</h4>
+          <div class="space-y-2 text-sm">
+            <div class="flex justify-between text-slate-400"><span>Monthly Gross Salary:</span><span id="meterGross">৳ 0.00</span></div>
+            <div class="flex justify-between text-slate-200 font-semibold"><span>30% Max Purchase Limit:</span><span id="meterLimit">৳ 0.00</span></div>
+            <div class="flex justify-between text-amber-400"><span>Already Spent:</span><span id="meterSpent">- ৳ 0.00</span></div>
+            <hr class="border-slate-700">
+            <div class="flex justify-between text-slate-200 font-bold"><span>Opening Available Credit:</span><span id="meterOpening">৳ 0.00</span></div>
+            <div class="flex justify-between text-sky-400"><span>Current Cart Deduction:</span><span id="meterCart">- ৳ 0.00</span></div>
+          </div>
+
+          <div class="mt-4 p-3 rounded bg-slate-900 border border-slate-700 text-center">
+            <span class="text-xs uppercase text-slate-400 block">Remaining Credit Balance</span>
+            <span id="meterRemaining" class="text-3xl font-extrabold text-emerald-400">৳ 0.00</span>
+          </div>
+
+          <div class="mt-3">
+            <div class="flex justify-between text-xs text-slate-400 mb-1">
+              <span>Monthly Limit Utilization</span><span id="meterPercent">0%</span>
+            </div>
+            <div class="w-full bg-slate-900 h-3 rounded-full overflow-hidden border border-slate-700">
+              <div id="meterBar" class="bg-emerald-500 h-full transition-all duration-200" style="width: 0%"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2 pt-4 border-t border-slate-700 mt-4">
+          <button onclick="clearPosCart()" class="bg-slate-700 hover:bg-slate-600 py-3 rounded font-semibold text-sm">Clear Cart</button>
+          <button id="posCheckoutBtn" onclick="completePosCheckout()" disabled
+                  class="bg-emerald-600 hover:bg-emerald-500 py-3 rounded font-bold text-sm disabled:opacity-40">
+            Confirm & Print Bill
+          </button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- TAB 2: EMPLOYEE MASTER -->
+  <main id="view-employees" class="hidden flex-1 grid grid-cols-12 gap-4 p-4">
+    <section class="col-span-12 lg:col-span-4 bg-slate-800 rounded-lg border border-slate-700 p-5 h-fit">
+      <h2 class="text-base font-bold text-emerald-400 mb-4">Add / Modify Employee (Cloud)</h2>
+      <form onsubmit="saveEmployee(event)" class="space-y-3 text-sm">
+        <div>
+          <label class="block text-xs text-slate-400 uppercase mb-1">Employee ID / RFID No *</label>
+          <input id="empId" type="text" required placeholder="EMP-101" class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white font-mono">
+        </div>
+        <div>
+          <label class="block text-xs text-slate-400 uppercase mb-1">Full Name *</label>
+          <input id="empName" type="text" required class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white">
+        </div>
+        <div>
+          <label class="block text-xs text-slate-400 uppercase mb-1">Department *</label>
+          <input id="empDept" type="text" required class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white">
+        </div>
+        <div>
+          <label class="block text-xs text-slate-400 uppercase mb-1">Monthly Gross Salary (BDT) *</label>
+          <input id="empSalary" type="number" step="0.01" required oninput="previewLimit()" class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white">
+          <p id="empLimitPreview" class="text-xs text-emerald-400 mt-1">Auto 30% Limit: ৳ 0.00</p>
+        </div>
+        <div>
+          <label class="block text-xs text-slate-400 uppercase mb-1">Status</label>
+          <select id="empActive" class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white">
+            <option value="true">ACTIVE (Allowed)</option>
+            <option value="false">BLOCKED</option>
+          </select>
+        </div>
+        <div class="flex gap-2 pt-2">
+          <button type="submit" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded">Save to Cloud</button>
+          <button type="button" onclick="resetEmpForm()" class="bg-slate-700 hover:bg-slate-600 px-4 py-2.5 rounded">Reset</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="col-span-12 lg:col-span-8 bg-slate-800 rounded-lg border border-slate-700 p-5">
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-base font-bold">Employee Directory (Realtime Sync)</h2>
+        <input id="empSearch" type="text" placeholder="Search Employee..." oninput="renderEmployeesTable()"
+               class="bg-slate-900 border border-slate-600 rounded px-3 py-1.5 text-sm text-white w-64">
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse text-sm">
+          <thead>
+            <tr class="border-b border-slate-700 text-slate-400 text-xs uppercase">
+              <th class="py-2">Emp ID</th>
+              <th class="py-2">Name & Dept</th>
+              <th class="py-2 text-right">Gross Salary</th>
+              <th class="py-2 text-right">30% Limit</th>
+              <th class="py-2 text-right">Spent</th>
+              <th class="py-2 text-center">Status</th>
+              <th class="py-2 text-center">Modify</th>
+            </tr>
+          </thead>
+          <tbody id="empTableBody" class="divide-y divide-slate-700/60"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <!-- TAB 3: PRODUCT MASTER -->
+  <main id="view-products" class="hidden flex-1 grid grid-cols-12 gap-4 p-4">
+    <section class="col-span-12 lg:col-span-4 bg-slate-800 rounded-lg border border-slate-700 p-5 h-fit">
+      <h2 class="text-base font-bold text-emerald-400 mb-4">Add / Modify Product (Cloud)</h2>
+      <form onsubmit="saveProduct(event)" class="space-y-3 text-sm">
+        <div>
+          <label class="block text-xs text-slate-400 uppercase mb-1">Barcode / SKU *</label>
+          <input id="prodBarcode" type="text" required class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white font-mono">
+        </div>
+        <div>
+          <label class="block text-xs text-slate-400 uppercase mb-1">Product Name *</label>
+          <input id="prodName" type="text" required class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white">
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block text-xs text-slate-400 uppercase mb-1">Cost Price (৳) *</label>
+            <input id="prodCost" type="number" step="0.01" required class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white">
+          </div>
+          <div>
+            <label class="block text-xs text-slate-400 uppercase mb-1">Fair Price (৳) *</label>
+            <input id="prodPrice" type="number" step="0.01" required class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white">
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs text-slate-400 uppercase mb-1">Stock Quantity *</label>
+          <input id="prodStock" type="number" required class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white">
+        </div>
+        <div class="flex gap-2 pt-2">
+          <button type="submit" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded">Save Product</button>
+          <button type="button" onclick="resetProdForm()" class="bg-slate-700 hover:bg-slate-600 px-4 py-2.5 rounded">Reset</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="col-span-12 lg:col-span-8 bg-slate-800 rounded-lg border border-slate-700 p-5">
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-base font-bold">Product Catalog & Live Stock</h2>
+        <input id="prodSearch" type="text" placeholder="Search Product..." oninput="renderProductsTable()"
+               class="bg-slate-900 border border-slate-600 rounded px-3 py-1.5 text-sm text-white w-64">
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse text-sm">
+          <thead>
+            <tr class="border-b border-slate-700 text-slate-400 text-xs uppercase">
+              <th class="py-2">Barcode</th>
+              <th class="py-2">Product Name</th>
+              <th class="py-2 text-right">Fair Price</th>
+              <th class="py-2 text-center">In Stock</th>
+              <th class="py-2 text-center">Modify</th>
+            </tr>
+          </thead>
+          <tbody id="prodTableBody" class="divide-y divide-slate-700/60"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <!-- TAB 4: SALES LEDGER -->
+  <main id="view-reports" class="hidden flex-1 p-4 space-y-4">
+    <div class="bg-slate-800 p-4 rounded-lg border border-slate-700 flex justify-between items-center">
+      <div>
+        <h2 class="text-base font-bold">Realtime Sales & Purchase Ledger</h2>
+        <p class="text-xs text-slate-400">All invoices synced instantly via Firebase</p>
+      </div>
+    </div>
+    <div class="bg-slate-800 p-5 rounded-lg border border-slate-700">
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse text-sm">
+          <thead>
+            <tr class="border-b border-slate-700 text-slate-400 text-xs uppercase">
+              <th class="py-2">Invoice #</th>
+              <th class="py-2">Date & Time</th>
+              <th class="py-2">Emp ID</th>
+              <th class="py-2">Employee Name</th>
+              <th class="py-2">Items Purchased</th>
+              <th class="py-2 text-right">Total (BDT)</th>
+            </tr>
+          </thead>
+          <tbody id="salesTableBody" class="divide-y divide-slate-700/60"></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <!-- RECEIPT MODAL -->
+  <div id="receiptModal" class="hidden fixed inset-0 bg-black/75 flex items-center justify-center z-50">
+    <div class="bg-white text-black p-6 rounded shadow-lg w-80 font-mono text-xs">
+      <div class="text-center border-b border-dashed border-black pb-2 mb-2">
+        <h2 class="font-bold text-sm">FACTORY FAIR PRICE SHOP</h2>
+        <p>Realtime Cloud Receipt</p>
+        <p id="rcptDate"></p>
+        <p id="rcptInv"></p>
+      </div>
+      <div class="border-b border-dashed border-black pb-2 mb-2">
+        <p><strong>Emp ID:</strong> <span id="rcptEmpId"></span></p>
+        <p><strong>Name:</strong> <span id="rcptEmpName"></span></p>
+        <p><strong>Dept:</strong> <span id="rcptEmpDept"></span></p>
+      </div>
+      <div id="rcptItems" class="space-y-1 border-b border-dashed border-black pb-2 mb-2"></div>
+      <div class="space-y-1 border-b border-dashed border-black pb-2 mb-2">
+        <div class="flex justify-between font-bold text-sm"><span>INVOICE TOTAL:</span><span id="rcptTotal"></span></div>
+        <div class="flex justify-between font-bold"><span>Remaining Credit:</span><span id="rcptRemaining"></span></div>
+      </div>
+      <div class="mt-4 flex gap-2">
+        <button onclick="window.print()" class="flex-1 bg-emerald-600 text-white font-bold py-2 rounded">Print</button>
+        <button onclick="document.getElementById('receiptModal').classList.add('hidden')" class="flex-1 bg-slate-800 text-white py-2 rounded">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- APPLICATION JAVASCRIPT LOGIC -->
+  <script>
+    let db, ref, set, get, update, remove, onValue, push, child;
+    let employees = {};
+    let products = {};
+    let sales = {};
+    let currentPosEmp = null;
+    let posCart = [];
+
+    window.initializeAppReady = function() {
+      const fb = window.dbRefs;
+      db = fb.db; ref = fb.ref; set = fb.set; get = fb.get; update = fb.update; remove = fb.remove; onValue = fb.onValue; push = fb.push; child = fb.child;
+
+      document.getElementById('syncStatus').innerText = 'Connected to Firebase Realtime Database ✅';
+      document.getElementById('syncStatus').className = 'text-xs text-emerald-400 font-semibold';
+
+      // Listen to Realtime Updates from Firebase
+      onValue(ref(db, 'employees'), (snapshot) => {
+        employees = snapshot.val() || {};
+        populateDropdowns();
+        renderEmployeesTable();
+        if (currentPosEmp) {
+          currentPosEmp = employees[currentPosEmp.empIdKey] || null;
+          renderPosState();
+        }
+      });
+
+      onValue(ref(db, 'products'), (snapshot) => {
+        products = snapshot.val() || {};
+        populateDropdowns();
+        renderProductsTable();
+      });
+
+      onValue(ref(db, 'sales'), (snapshot) => {
+        sales = snapshot.val() || {};
+        renderSalesTable();
+      });
+    };
+
+    function switchTab(tab) {
+      ['pos', 'employees', 'products', 'reports'].forEach(t => {
+        document.getElementById('view-' + t).classList.add('hidden');
+        document.getElementById('tab-' + t).className = 'px-4 py-2 rounded text-sm font-semibold bg-slate-700 text-slate-300';
+      });
+      document.getElementById('view-' + tab).classList.remove('hidden');
+      document.getElementById('tab-' + tab).className = 'px-4 py-2 rounded text-sm font-semibold bg-emerald-600 text-white';
+    }
+
+    function populateDropdowns() {
+      const empSel = document.getElementById('posEmpDropdown');
+      empSel.innerHTML = '<option value="">-- Choose Employee --</option>';
+      Object.keys(employees).forEach(key => {
+        const e = employees[key];
+        const avail = (e.gross_salary * 0.30) - (e.spent || 0);
+        empSel.innerHTML += `<option value="${key}">${e.id} - ${e.name} (Avail: ৳${avail.toFixed(0)})</option>`;
+      });
+
+      const prodSel = document.getElementById('posProductSelect');
+      prodSel.innerHTML = '<option value="">-- Choose Product --</option>';
+      Object.keys(products).forEach(key => {
+        const p = products[key];
+        prodSel.innerHTML += `<option value="${key}">${p.name} - ৳${p.price} (Stock: ${p.stock})</option>`;
+      });
+    }
+
+    // POS FUNCTIONS
+    function lookupPosEmployee() {
+      const inputId = document.getElementById('posEmpInput').value.trim().toUpperCase();
+      let foundKey = null;
+      Object.keys(employees).forEach(k => {
+        if (employees[k].id.toUpperCase() === inputId) foundKey = k;
+      });
+
+      if (!foundKey) return alert('Employee ID not found in Firebase!');
+      currentPosEmp = employees[foundKey];
+      currentPosEmp.empIdKey = foundKey;
+      document.getElementById('posEmpDropdown').value = foundKey;
+      renderPosState();
+      document.getElementById('posBarcodeInput').focus();
+    }
+
+    function selectPosEmployeeDropdown(key) {
+      if (!key) return;
+      currentPosEmp = employees[key];
+      currentPosEmp.empIdKey = key;
+      document.getElementById('posEmpInput').value = currentPosEmp.id;
+      renderPosState();
+    }
+
+    function addSelectedProduct() {
+      const key = document.getElementById('posProductSelect').value;
+      if (key) addProductToCart(key);
+    }
+
+    function scanBarcode() {
+      const code = document.getElementById('posBarcodeInput').value.trim();
+      let foundKey = null;
+      Object.keys(products).forEach(k => {
+        if (products[k].barcode === code) foundKey = k;
+      });
+      if (foundKey) {
+        addProductToCart(foundKey);
+        document.getElementById('posBarcodeInput').value = '';
+      } else {
+        alert('Product barcode not found!');
+      }
+    }
+
+    function addProductToCart(prodKey) {
+      if (!currentPosEmp) return alert('Load Employee ID first!');
+      if (!currentPosEmp.active) return alert('Employee is BLOCKED!');
+      const prod = products[prodKey];
+
+      const existing = posCart.find(c => c.prodKey === prodKey);
+      const nextQty = (existing ? existing.qty : 0) + 1;
+      if (nextQty > prod.stock) return alert(`Insufficient stock! Available: ${prod.stock}`);
+
+      if (existing) existing.qty += 1;
+      else posCart.push({ prodKey, barcode: prod.barcode, name: prod.name, price: Number(prod.price), qty: 1 });
+      renderPosState();
+    }
+
+    function changeQty(idx, delta) {
+      const item = posCart[idx];
+      const prod = products[item.prodKey];
+      const next = item.qty + delta;
+      if (next <= 0) posCart.splice(idx, 1);
+      else if (prod && next > prod.stock) alert(`Max stock is ${prod.stock}`);
+      else item.qty = next;
+      renderPosState();
+    }
+
+    function clearPosCart() {
+      posCart = [];
+      renderPosState();
+    }
+
+    function renderPosState() {
+      const tbody = document.getElementById('posCartBody');
+      tbody.innerHTML = '';
+      let cartTotal = 0;
+
+      posCart.forEach((item, i) => {
+        const sub = item.price * item.qty;
+        cartTotal += sub;
+        tbody.innerHTML += `
+          <tr>
+            <td class="py-2">${i + 1}</td>
+            <td class="py-2 font-mono text-xs">${item.barcode}</td>
+            <td class="py-2 font-semibold">${item.name}</td>
+            <td class="py-2">৳ ${item.price.toFixed(2)}</td>
+            <td class="py-2 text-center space-x-1">
+              <button onclick="changeQty(${i}, -1)" class="bg-slate-700 px-2 rounded">-</button>
+              <span class="px-2 font-bold">${item.qty}</span>
+              <button onclick="changeQty(${i}, 1)" class="bg-slate-700 px-2 rounded">+</button>
+            </td>
+            <td class="py-2 text-right font-bold">৳ ${sub.toFixed(2)}</td>
+            <td class="py-2 text-center"><button onclick="changeQty(${i}, -9999)" class="text-rose-400 text-xs">Remove</button></td>
+          </tr>`;
+      });
+
+      document.getElementById('posCartTotal').innerText = `৳ ${cartTotal.toFixed(2)}`;
+      const btn = document.getElementById('posCheckoutBtn');
+      const statusText = document.getElementById('posStatusText');
+
+      if (!currentPosEmp) { btn.disabled = true; return; }
+
+      const spent = currentPosEmp.spent || 0;
+      const maxLimit = currentPosEmp.gross_salary * 0.30;
+      const opening  = maxLimit - spent;
+      const rem      = opening - cartTotal;
+      const pct      = maxLimit > 0 ? Math.min(100, Math.round(((spent + cartTotal) / maxLimit) * 100)) : 0;
+
+      document.getElementById('posEmpName').innerText = `${currentPosEmp.name} (${currentPosEmp.id})`;
+      document.getElementById('posEmpStatus').innerText = currentPosEmp.active ? 'ACTIVE' : 'BLOCKED';
+      document.getElementById('posEmpMeta').innerText = `${currentPosEmp.dept} • Gross: ৳${currentPosEmp.gross_salary.toFixed(2)}`;
+
+      document.getElementById('meterGross').innerText = `৳ ${currentPosEmp.gross_salary.toFixed(2)}`;
+      document.getElementById('meterLimit').innerText = `৳ ${maxLimit.toFixed(2)}`;
+      document.getElementById('meterSpent').innerText = `- ৳ ${spent.toFixed(2)}`;
+      document.getElementById('meterOpening').innerText = `৳ ${opening.toFixed(2)}`;
+      document.getElementById('meterCart').innerText = `- ৳ ${cartTotal.toFixed(2)}`;
+      document.getElementById('meterRemaining').innerText = `৳ ${rem.toFixed(2)}`;
+      document.getElementById('meterPercent').innerText = `${pct}%`;
+      document.getElementById('meterBar').style.width = `${pct}%`;
+
+      if (rem < 0) {
+        btn.disabled = true;
+        document.getElementById('meterRemaining').className = 'text-3xl font-extrabold text-rose-500';
+        statusText.className = 'text-sm font-bold text-rose-400';
+        statusText.innerText = `30% LIMIT EXCEEDED BY ৳ ${Math.abs(rem).toFixed(2)}!`;
+      } else {
+        btn.disabled = posCart.length === 0 || !currentPosEmp.active;
+        document.getElementById('meterRemaining').className = 'text-3xl font-extrabold text-emerald-400';
+        statusText.className = 'text-sm font-semibold text-emerald-400';
+        statusText.innerText = posCart.length > 0 ? 'Within 30% Salary Limit — Ready to Bill' : 'Scan items to add.';
+      }
+    }
+
+    async function completePosCheckout() {
+      if (!currentPosEmp || posCart.length === 0) return;
+      const cartTotal = posCart.reduce((s, i) => s + (i.price * i.qty), 0);
+      const maxLimit = currentPosEmp.gross_salary * 0.30;
+      const spent = currentPosEmp.spent || 0;
+
+      if ((spent + cartTotal) > maxLimit) {
+        alert('Checkout blocked: 30% limit exceeded!');
+        return;
+      }
+
+      // Update Stock in Firebase
+      for (const item of posCart) {
+        const prod = products[item.prodKey];
+        const newStock = prod.stock - item.qty;
+        await update(ref(db, `products/${item.prodKey}`), { stock: newStock });
+      }
+
+      // Update Employee Spent in Firebase
+      const newSpent = spent + cartTotal;
+      await update(ref(db, `employees/${currentPosEmp.empIdKey}`), { spent: newSpent });
+
+      // Save Sale in Firebase
+      const invNo = 'INV-' + Math.floor(100000 + Math.random() * 900000);
+      const now = new Date().toLocaleString();
+      const itemsSummary = posCart.map(i => `${i.name} (x${i.qty})`).join(', ');
+
+      await push(ref(db, 'sales'), {
+        invoiceNo: invNo,
+        date: now,
+        empId: currentPosEmp.id,
+        empName: currentPosEmp.name,
+        items: itemsSummary,
+        total: cartTotal
+      });
+
+      // Show Receipt
+      document.getElementById('rcptDate').innerText = now;
+      document.getElementById('rcptInv').innerText = `Invoice: ${invNo}`;
+      document.getElementById('rcptEmpId').innerText = currentPosEmp.id;
+      document.getElementById('rcptEmpName').innerText = currentPosEmp.name;
+      document.getElementById('rcptEmpDept').innerText = currentPosEmp.dept;
+
+      const itemsEl = document.getElementById('rcptItems');
+      itemsEl.innerHTML = '';
+      posCart.forEach(i => {
+        itemsEl.innerHTML += `<div class="flex justify-between"><span>${i.name} x${i.qty}</span><span>৳${(i.price*i.qty).toFixed(2)}</span></div>`;
+      });
+
+      document.getElementById('rcptTotal').innerText = `৳ ${cartTotal.toFixed(2)}`;
+      document.getElementById('rcptRemaining').innerText = `৳ ${(maxLimit - newSpent).toFixed(2)}`;
+      document.getElementById('receiptModal').classList.remove('hidden');
+
+      posCart = [];
+    }
+
+    // EMPLOYEE CRUD
+    function previewLimit() {
+      const sal = parseFloat(document.getElementById('empSalary').value) || 0;
+      document.getElementById('empLimitPreview').innerText = `Auto 30% Limit: ৳ ${(sal * 0.30).toFixed(2)}`;
+    }
+
+    async function saveEmployee(e) {
+      e.preventDefault();
+      const id = document.getElementById('empId').value.trim().toUpperCase();
+      const name = document.getElementById('empName').value.trim();
+      const dept = document.getElementById('empDept').value.trim();
+      const salary = parseFloat(document.getElementById('empSalary').value);
+      const active = document.getElementById('empActive').value === 'true';
+
+      // Check if ID exists or create new key
+      let existingKey = null;
+      Object.keys(employees).forEach(k => {
+        if (employees[k].id === id) existingKey = k;
+      });
+
+      const empData = { id, name, dept, gross_salary: salary, active, spent: existingKey ? employees[existingKey].spent || 0 : 0 };
+
+      if (existingKey) {
+        await update(ref(db, `employees/${existingKey}`), empData);
+      } else {
+        await push(ref(db, 'employees'), empData);
+      }
+      resetEmpForm();
+      alert('Employee saved to Firebase!');
+    }
+
+    function editEmployee(key) {
+      const e = employees[key];
+      document.getElementById('empId').value = e.id;
+      document.getElementById('empName').value = e.name;
+      document.getElementById('empDept').value = e.dept;
+      document.getElementById('empSalary').value = e.gross_salary;
+      document.getElementById('empActive').value = String(e.active);
+      previewLimit();
+    }
+
+    async function deleteEmployee(key) {
+      if (confirm('Delete this employee from Firebase?')) {
+        await remove(ref(db, `employees/${key}`));
+      }
+    }
+
+    function resetEmpForm() {
+      document.getElementById('empId').value = '';
+      document.getElementById('empName').value = '';
+      document.getElementById('empDept').value = '';
+      document.getElementById('empSalary').value = '';
+      document.getElementById('empActive').value = 'true';
+      previewLimit();
+    }
+
+    function renderEmployeesTable() {
+      const q = (document.getElementById('empSearch')?.value || '').toLowerCase();
+      const tbody = document.getElementById('empTableBody');
+      tbody.innerHTML = '';
+      Object.keys(employees).forEach(key => {
+        const e = employees[key];
+        if (e.id.toLowerCase().includes(q) || e.name.toLowerCase().includes(q)) {
+          const lim = e.gross_salary * 0.30;
+          const spent = e.spent || 0;
+          tbody.innerHTML += `
+            <tr>
+              <td class="py-2.5 font-mono text-emerald-400 font-bold">${e.id}</td>
+              <td class="py-2.5"><div>${e.name}</div><div class="text-xs text-slate-400">${e.dept}</div></td>
+              <td class="py-2.5 text-right">৳ ${e.gross_salary.toFixed(2)}</td>
+              <td class="py-2.5 text-right font-semibold">৳ ${lim.toFixed(2)}</td>
+              <td class="py-2.5 text-right text-amber-400">৳ ${spent.toFixed(2)}</td>
+              <td class="py-2.5 text-center">${e.active ? 'ACTIVE' : 'BLOCKED'}</td>
+              <td class="py-2.5 text-center space-x-2">
+                <button onclick="editEmployee('${key}')" class="text-sky-400 text-xs font-bold">Edit</button>
+                <button onclick="deleteEmployee('${key}')" class="text-rose-400 text-xs">Delete</button>
+              </td>
+            </tr>`;
+        }
+      });
+    }
+
+    // PRODUCT CRUD
+    async function saveProduct(e) {
+      e.preventDefault();
+      const barcode = document.getElementById('prodBarcode').value.trim();
+      const name = document.getElementById('prodName').value.trim();
+      const cost = parseFloat(document.getElementById('prodCost').value);
+      const price = parseFloat(document.getElementById('prodPrice').value);
+      const stock = parseInt(document.getElementById('prodStock').value);
+
+      let existingKey = null;
+      Object.keys(products).forEach(k => {
+        if (products[k].barcode === barcode) existingKey = k;
+      });
+
+      const prodData = { barcode, name, cost, price, stock };
+      if (existingKey) {
+        await update(ref(db, `products/${existingKey}`), prodData);
+      } else {
+        await push(ref(db, 'products'), prodData);
+      }
+      resetProdForm();
+      alert('Product saved to Firebase!');
+    }
+
+    function editProduct(key) {
+      const p = products[key];
+      document.getElementById('prodBarcode').value = p.barcode;
+      document.getElementById('prodName').value = p.name;
+      document.getElementById('prodCost').value = p.cost;
+      document.getElementById('prodPrice').value = p.price;
+      document.getElementById('prodStock').value = p.stock;
+    }
+
+    async function deleteProduct(key) {
+      if (confirm('Delete product?')) await remove(ref(db, `products/${key}`));
+    }
+
+    function resetProdForm() {
+      document.getElementById('prodBarcode').value = '';
+      document.getElementById('prodName').value = '';
+      document.getElementById('prodCost').value = '';
+      document.getElementById('prodPrice').value = '';
+      document.getElementById('prodStock').value = '';
+    }
+
+    function renderProductsTable() {
+      const q = (document.getElementById('prodSearch')?.value || '').toLowerCase();
+      const tbody = document.getElementById('prodTableBody');
+      tbody.innerHTML = '';
+      Object.keys(products).forEach(key => {
+        const p = products[key];
+        if (p.barcode.toLowerCase().includes(q) || p.name.toLowerCase().includes(q)) {
+          tbody.innerHTML += `
+            <tr>
+              <td class="py-2.5 font-mono">${p.barcode}</td>
+              <td class="py-2.5 font-semibold">${p.name}</td>
+              <td class="py-2.5 text-right text-emerald-400 font-bold">৳ ${p.price.toFixed(2)}</td>
+              <td class="py-2.5 text-center font-bold">${p.stock} pcs</td>
+              <td class="py-2.5 text-center space-x-2">
+                <button onclick="editProduct('${key}')" class="text-sky-400 text-xs font-bold">Edit</button>
+                <button onclick="deleteProduct('${key}')" class="text-rose-400 text-xs">Delete</button>
+              </td>
+            </tr>`;
+          }
+      });
+    }
+
+    function renderSalesTable() {
+      const tbody = document.getElementById('salesTableBody');
+      tbody.innerHTML = '';
+      Object.keys(sales).forEach(key => {
+        const s = sales[key];
+        tbody.innerHTML += `
+          <tr>
+            <td class="py-2 font-mono text-emerald-400">${s.invoiceNo}</td>
+            <td class="py-2 text-xs text-slate-400">${s.date}</td>
+            <td class="py-2 font-mono font-bold">${s.empId}</td>
+            <td class="py-2 font-semibold">${s.empName}</td>
+            <td class="py-2 text-xs text-slate-300">${s.items}</td>
+            <td class="py-2 text-right font-bold">৳ ${Number(s.total).toFixed(2)}</td>
+          </tr>`;
+      });
+    }
+  </script>
+</body>
+</html>
