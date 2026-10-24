@@ -3,408 +3,423 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Factory Fair Shop POS (Firebase Realtime Sync)</title>
+  <title>Factory Fair Shop POS (Employees & Sales Export Fixed)</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Firebase App SDK (Modular v10 CDN) -->
+  <!-- Firebase App & Database SDK -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     import { getDatabase, ref, set, get, update, remove, onValue, push, child } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
-    // Firebase Configuration using your provided Realtime Database URL
     const firebaseConfig = {
       databaseURL: "https://fair-shop-3a00c-default-rtdb.firebaseio.com/"
     };
 
-    // Initialize Firebase
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
 
-    // Make database functions globally accessible
     window.dbRefs = { db, ref, set, get, update, remove, onValue, push, child };
     window.initializeAppReady();
   </script>
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col font-sans">
 
-  <!-- TOP NAVIGATION BAR -->
-  <header class="bg-slate-800 border-b border-slate-700 px-6 py-3 flex flex-wrap justify-between items-center gap-4">
-    <div class="flex items-center gap-3">
-      <span class="bg-emerald-600 text-white font-extrabold px-3 py-1.5 rounded text-sm">FIREBASE POS</span>
-      <div>
-        <h1 class="font-bold text-base leading-tight">Factory Fair Price Shop (Realtime)</h1>
-        <p class="text-xs text-emerald-400 font-semibold" id="syncStatus">Connecting to Firebase Cloud...</p>
+  <!-- LOGIN OVERLAY -->
+  <div id="loginModal" class="fixed inset-0 bg-slate-950 flex items-center justify-center z-50 p-4">
+    <div class="bg-slate-800 border border-slate-700 rounded-xl p-8 max-w-md w-full shadow-2xl">
+      <div class="text-center mb-6">
+        <span class="bg-emerald-600 text-white text-xs font-extrabold px-3 py-1 rounded uppercase tracking-wider">SECURE ERP LOGIN</span>
+        <h2 class="text-2xl font-bold mt-3">Fair Shop POS Portal</h2>
+        <p class="text-xs text-slate-400 mt-1">Sign in with your assigned role credentials</p>
       </div>
+      <form onsubmit="handleLogin(event)" class="space-y-4">
+        <div>
+          <label class="block text-xs uppercase font-bold text-slate-400 mb-1">Username</label>
+          <input id="loginUser" type="text" required placeholder="Enter username" class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white">
+        </div>
+        <div>
+          <label class="block text-xs uppercase font-bold text-slate-400 mb-1">Password</label>
+          <input id="loginPass" type="password" required placeholder="••••••••" class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white">
+        </div>
+        <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded text-sm transition">Sign In</button>
+      </form>
     </div>
+  </div>
 
-    <!-- Navigation Tabs -->
-    <nav class="flex gap-2">
-      <button onclick="switchTab('pos')" id="tab-pos" class="px-4 py-2 rounded text-sm font-semibold bg-emerald-600 text-white">1. POS Counter</button>
-      <button onclick="switchTab('employees')" id="tab-employees" class="px-4 py-2 rounded text-sm font-semibold bg-slate-700 text-slate-300">2. Employee Master</button>
-      <button onclick="switchTab('products')" id="tab-products" class="px-4 py-2 rounded text-sm font-semibold bg-slate-700 text-slate-300">3. Product & Stock</button>
-      <button onclick="switchTab('reports')" id="tab-reports" class="px-4 py-2 rounded text-sm font-semibold bg-slate-700 text-slate-300">4. Sales Ledger</button>
-    </nav>
-  </header>
-
-  <!-- TAB 1: POS BILLING COUNTER -->
-  <main id="view-pos" class="flex-1 grid grid-cols-12 gap-4 p-4">
-    <section class="col-span-12 lg:col-span-8 bg-slate-800 rounded-lg border border-slate-700 flex flex-col justify-between p-4">
-      <div>
-        <div class="grid grid-cols-12 gap-2 mb-4 bg-slate-900 p-3 rounded border border-slate-700">
-          <div class="col-span-5">
-            <label class="text-xs text-slate-400 uppercase block mb-1">Scan Barcode (Enter)</label>
-            <input id="posBarcodeInput" type="text" placeholder="Scan barcode..." onkeydown="if(event.key==='Enter') scanBarcode()"
-                   class="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-white">
-          </div>
-          <div class="col-span-5">
-            <label class="text-xs text-slate-400 uppercase block mb-1">Or Select Product</label>
-            <select id="posProductSelect" class="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-white"></select>
-          </div>
-          <div class="col-span-2 flex items-end">
-            <button onclick="addSelectedProduct()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 rounded text-sm">+ Add</button>
-          </div>
-        </div>
-
-        <div class="overflow-x-auto max-h-96">
-          <table class="w-full text-left border-collapse text-sm">
-            <thead>
-              <tr class="border-b border-slate-700 text-slate-400 text-xs uppercase">
-                <th class="py-2">#</th>
-                <th class="py-2">Barcode</th>
-                <th class="py-2">Item Name</th>
-                <th class="py-2">Fair Price</th>
-                <th class="py-2 text-center">Qty</th>
-                <th class="py-2 text-right">Subtotal</th>
-                <th class="py-2 text-center">Action</th>
-              </tr>
-            </thead>
-            <tbody id="posCartBody" class="divide-y divide-slate-700/60"></tbody>
-          </table>
+  <!-- MAIN APP CONTAINER -->
+  <div id="appContainer" class="hidden flex-1 flex flex-col">
+    <!-- TOP NAVBAR -->
+    <header class="bg-slate-800 border-b border-slate-700 px-6 py-3 flex flex-wrap justify-between items-center gap-4">
+      <div class="flex items-center gap-3">
+        <span class="bg-emerald-600 text-white font-extrabold px-3 py-1.5 rounded text-sm">ERP PORTAL</span>
+        <div>
+          <h1 class="font-bold text-base leading-tight">Factory Fair Price Shop</h1>
+          <p class="text-xs text-slate-400">User: <strong id="loggedUserName" class="text-emerald-400"></strong> (<span id="loggedUserRole" class="uppercase text-sky-400"></span>)</p>
         </div>
       </div>
 
-      <div id="posStatusBanner" class="mt-4 p-4 rounded bg-slate-900 border border-slate-700 flex justify-between items-center">
-        <span id="posStatusText" class="text-sm font-semibold text-slate-300">Scan Employee ID to begin billing.</span>
-        <div class="text-right">
-          <span class="text-xs text-slate-400 uppercase block">Current Invoice Total</span>
-          <span id="posCartTotal" class="text-2xl font-extrabold text-white">৳ 0.00</span>
-        </div>
-      </div>
-    </section>
+      <nav id="navTabs" class="flex flex-wrap gap-2"></nav>
 
-    <section class="col-span-12 lg:col-span-4 flex flex-col gap-4">
-      <div class="bg-slate-800 rounded-lg border border-slate-700 p-4">
-        <label class="text-xs text-slate-400 uppercase font-bold block mb-1">Tap RFID / Enter Employee ID</label>
-        <div class="flex gap-2 mb-3">
-          <input id="posEmpInput" type="text" placeholder="EMP-101" onkeydown="if(event.key==='Enter') lookupPosEmployee()"
-                 class="flex-1 bg-slate-900 border border-emerald-500 rounded px-3 py-2 text-sm font-mono text-white">
-          <button onclick="lookupPosEmployee()" class="bg-emerald-600 hover:bg-emerald-500 px-4 py-2 rounded font-bold text-sm">Load</button>
-        </div>
-        <select id="posEmpDropdown" onchange="selectPosEmployeeDropdown(this.value)" class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-xs text-slate-300 mb-3"></select>
+      <button onclick="logout()" class="bg-rose-700 hover:bg-rose-600 px-3 py-1.5 rounded text-xs font-bold text-white">Sign Out</button>
+    </header>
 
-        <div class="bg-slate-900 p-3 rounded border border-slate-700">
-          <div class="flex justify-between items-center">
+    <!-- TAB 1: POS COUNTER -->
+    <main id="view-pos" class="tab-view hidden flex-1 grid grid-cols-12 gap-4 p-4">
+      <section class="col-span-12 lg:col-span-8 bg-slate-800 rounded-lg border border-slate-700 p-4 flex flex-col justify-between">
+        <div>
+          <div class="grid grid-cols-12 gap-2 mb-4 bg-slate-900 p-3 rounded border border-slate-700">
+            <div class="col-span-5">
+              <label class="text-xs text-slate-400 uppercase block mb-1">Scan Barcode (Enter)</label>
+              <input id="posBarcodeInput" type="text" placeholder="Scan barcode..." onkeydown="if(event.key==='Enter') scanBarcode()" class="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-white">
+            </div>
+            <div class="col-span-5">
+              <label class="text-xs text-slate-400 uppercase block mb-1">Or Select Product</label>
+              <select id="posProductSelect" class="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-white"></select>
+            </div>
+            <div class="col-span-2 flex items-end">
+              <button onclick="addSelectedProduct()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 rounded text-sm">+ Add</button>
+            </div>
+          </div>
+          <div class="overflow-x-auto max-h-96">
+            <table class="w-full text-left border-collapse text-sm">
+              <thead>
+                <tr class="border-b border-slate-700 text-slate-400 text-xs uppercase">
+                  <th class="py-2">#</th><th class="py-2">Barcode</th><th class="py-2">Item Name</th><th class="py-2">Price</th><th class="py-2 text-center">Qty</th><th class="py-2 text-right">Subtotal</th><th class="py-2 text-center">Action</th>
+                </tr>
+              </thead>
+              <tbody id="posCartBody" class="divide-y divide-slate-700/60"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="mt-4 p-4 rounded bg-slate-900 border border-slate-700 flex justify-between items-center">
+          <span id="posStatusText" class="text-sm font-semibold text-slate-300">Scan Employee ID to begin billing.</span>
+          <div class="text-right">
+            <span class="text-xs text-slate-400 uppercase block">Cart Total</span>
+            <span id="posCartTotal" class="text-2xl font-extrabold text-white">৳ 0.00</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="col-span-12 lg:col-span-4 flex flex-col gap-4">
+        <div class="bg-slate-800 rounded-lg border border-slate-700 p-4">
+          <label class="text-xs text-slate-400 uppercase font-bold block mb-1">Employee ID / RFID</label>
+          <div class="flex gap-2 mb-3">
+            <input id="posEmpInput" type="text" placeholder="EMP-101" onkeydown="if(event.key==='Enter') lookupPosEmployee()" class="flex-1 bg-slate-900 border border-emerald-500 rounded px-3 py-2 text-sm font-mono text-white">
+            <button onclick="lookupPosEmployee()" class="bg-emerald-600 hover:bg-emerald-500 px-4 py-2 rounded font-bold text-sm">Load</button>
+          </div>
+          <div class="bg-slate-900 p-3 rounded border border-slate-700">
             <h3 id="posEmpName" class="font-bold text-base text-white">No Employee Loaded</h3>
-            <span id="posEmpStatus" class="text-xs px-2 py-0.5 rounded bg-slate-700 text-slate-300">WAITING</span>
+            <p id="posEmpMeta" class="text-xs text-slate-400 mt-1">30% limit verification pending</p>
           </div>
-          <p id="posEmpMeta" class="text-xs text-slate-400 mt-1">Realtime Firebase balance check</p>
         </div>
-      </div>
-
-      <div class="bg-slate-800 rounded-lg border border-slate-700 p-4 flex-1 flex flex-col justify-between">
-        <div>
-          <h4 class="text-xs font-bold uppercase text-slate-400 tracking-wider mb-3">30% Gross Salary Credit Meter</h4>
-          <div class="space-y-2 text-sm">
-            <div class="flex justify-between text-slate-400"><span>Monthly Gross Salary:</span><span id="meterGross">৳ 0.00</span></div>
-            <div class="flex justify-between text-slate-200 font-semibold"><span>30% Max Purchase Limit:</span><span id="meterLimit">৳ 0.00</span></div>
-            <div class="flex justify-between text-amber-400"><span>Already Spent:</span><span id="meterSpent">- ৳ 0.00</span></div>
-            <hr class="border-slate-700">
-            <div class="flex justify-between text-slate-200 font-bold"><span>Opening Available Credit:</span><span id="meterOpening">৳ 0.00</span></div>
-            <div class="flex justify-between text-sky-400"><span>Current Cart Deduction:</span><span id="meterCart">- ৳ 0.00</span></div>
-          </div>
-
-          <div class="mt-4 p-3 rounded bg-slate-900 border border-slate-700 text-center">
-            <span class="text-xs uppercase text-slate-400 block">Remaining Credit Balance</span>
-            <span id="meterRemaining" class="text-3xl font-extrabold text-emerald-400">৳ 0.00</span>
-          </div>
-
-          <div class="mt-3">
-            <div class="flex justify-between text-xs text-slate-400 mb-1">
-              <span>Monthly Limit Utilization</span><span id="meterPercent">0%</span>
-            </div>
-            <div class="w-full bg-slate-900 h-3 rounded-full overflow-hidden border border-slate-700">
-              <div id="meterBar" class="bg-emerald-500 h-full transition-all duration-200" style="width: 0%"></div>
+        <div class="bg-slate-800 rounded-lg border border-slate-700 p-4 flex-1 flex flex-col justify-between">
+          <div>
+            <h4 class="text-xs font-bold uppercase text-slate-400 tracking-wider mb-3">Credit Meter</h4>
+            <div class="space-y-2 text-sm">
+              <div class="flex justify-between text-slate-400"><span>30% Max Limit:</span><span id="meterLimit">৳ 0.00</span></div>
+              <div class="flex justify-between text-amber-400"><span>Already Spent:</span><span id="meterSpent">- ৳ 0.00</span></div>
+              <hr class="border-slate-700">
+              <div class="flex justify-between text-slate-200 font-bold"><span>Remaining Balance:</span><span id="meterRemaining" class="text-2xl text-emerald-400">৳ 0.00</span></div>
             </div>
           </div>
+          <div class="grid grid-cols-2 gap-2 pt-4 border-t border-slate-700">
+            <button onclick="clearPosCart()" class="bg-slate-700 hover:bg-slate-600 py-3 rounded font-semibold text-sm">Clear</button>
+            <button id="posCheckoutBtn" onclick="completePosCheckout()" disabled class="bg-emerald-600 hover:bg-emerald-500 py-3 rounded font-bold text-sm disabled:opacity-40">Checkout</button>
+          </div>
         </div>
+      </section>
+    </main>
 
-        <div class="grid grid-cols-2 gap-2 pt-4 border-t border-slate-700 mt-4">
-          <button onclick="clearPosCart()" class="bg-slate-700 hover:bg-slate-600 py-3 rounded font-semibold text-sm">Clear Cart</button>
-          <button id="posCheckoutBtn" onclick="completePosCheckout()" disabled
-                  class="bg-emerald-600 hover:bg-emerald-500 py-3 rounded font-bold text-sm disabled:opacity-40">
-            Confirm & Print Bill
-          </button>
-        </div>
-      </div>
-    </section>
-  </main>
-
-  <!-- TAB 2: EMPLOYEE MASTER -->
-  <main id="view-employees" class="hidden flex-1 grid grid-cols-12 gap-4 p-4">
-    <section class="col-span-12 lg:col-span-4 bg-slate-800 rounded-lg border border-slate-700 p-5 h-fit">
-      <h2 class="text-base font-bold text-emerald-400 mb-4">Add / Modify Employee (Cloud)</h2>
-      <form onsubmit="saveEmployee(event)" class="space-y-3 text-sm">
-        <div>
-          <label class="block text-xs text-slate-400 uppercase mb-1">Employee ID / RFID No *</label>
-          <input id="empId" type="text" required placeholder="EMP-101" class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white font-mono">
-        </div>
-        <div>
-          <label class="block text-xs text-slate-400 uppercase mb-1">Full Name *</label>
-          <input id="empName" type="text" required class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white">
-        </div>
-        <div>
-          <label class="block text-xs text-slate-400 uppercase mb-1">Department *</label>
-          <input id="empDept" type="text" required class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white">
-        </div>
-        <div>
-          <label class="block text-xs text-slate-400 uppercase mb-1">Monthly Gross Salary (BDT) *</label>
-          <input id="empSalary" type="number" step="0.01" required oninput="previewLimit()" class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white">
-          <p id="empLimitPreview" class="text-xs text-emerald-400 mt-1">Auto 30% Limit: ৳ 0.00</p>
-        </div>
-        <div>
-          <label class="block text-xs text-slate-400 uppercase mb-1">Status</label>
-          <select id="empActive" class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white">
-            <option value="true">ACTIVE (Allowed)</option>
-            <option value="false">BLOCKED</option>
-          </select>
-        </div>
-        <div class="flex gap-2 pt-2">
-          <button type="submit" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded">Save to Cloud</button>
-          <button type="button" onclick="resetEmpForm()" class="bg-slate-700 hover:bg-slate-600 px-4 py-2.5 rounded">Reset</button>
-        </div>
-      </form>
-    </section>
-
-    <section class="col-span-12 lg:col-span-8 bg-slate-800 rounded-lg border border-slate-700 p-5">
-      <div class="flex justify-between items-center mb-4">
-        <h2 class="text-base font-bold">Employee Directory (Realtime Sync)</h2>
-        <input id="empSearch" type="text" placeholder="Search Employee..." oninput="renderEmployeesTable()"
-               class="bg-slate-900 border border-slate-600 rounded px-3 py-1.5 text-sm text-white w-64">
-      </div>
-      <div class="overflow-x-auto">
-        <table class="w-full text-left border-collapse text-sm">
-          <thead>
-            <tr class="border-b border-slate-700 text-slate-400 text-xs uppercase">
-              <th class="py-2">Emp ID</th>
-              <th class="py-2">Name & Dept</th>
-              <th class="py-2 text-right">Gross Salary</th>
-              <th class="py-2 text-right">30% Limit</th>
-              <th class="py-2 text-right">Spent</th>
-              <th class="py-2 text-center">Status</th>
-              <th class="py-2 text-center">Modify</th>
-            </tr>
-          </thead>
+    <!-- TAB 2: EMPLOYEE MASTER -->
+    <main id="view-employees" class="tab-view hidden flex-1 grid grid-cols-12 gap-4 p-4">
+      <section class="col-span-12 lg:col-span-4 bg-slate-800 rounded-lg border border-slate-700 p-5 h-fit">
+        <h2 class="text-base font-bold text-emerald-400 mb-4">Manage Employee & Salary</h2>
+        <form onsubmit="saveEmployee(event)" class="space-y-3 text-sm">
+          <input type="hidden" id="empKey">
+          <div><label class="block text-xs text-slate-400 uppercase mb-1">Emp ID *</label><input id="empId" type="text" required class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white font-mono"></div>
+          <div><label class="block text-xs text-slate-400 uppercase mb-1">Full Name *</label><input id="empName" type="text" required class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white"></div>
+          <div><label class="block text-xs text-slate-400 uppercase mb-1">Department *</label><input id="empDept" type="text" required class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white"></div>
+          <div><label class="block text-xs text-slate-400 uppercase mb-1">Gross Salary (BDT) *</label><input id="empSalary" type="number" step="0.01" required class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white"></div>
+          <div class="flex gap-2 pt-2">
+            <button type="submit" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded">Save Employee</button>
+            <button type="button" onclick="resetEmpForm()" class="bg-slate-700 hover:bg-slate-600 px-4 py-2.5 rounded">Reset</button>
+          </div>
+        </form>
+      </section>
+      <section class="col-span-12 lg:col-span-8 bg-slate-800 rounded-lg border border-slate-700 p-5">
+        <h2 class="text-base font-bold mb-4">Employee Directory</h2>
+        <div class="overflow-x-auto"><table class="w-full text-left border-collapse text-sm">
+          <thead><tr class="border-b border-slate-700 text-slate-400 text-xs uppercase"><th class="py-2">ID</th><th class="py-2">Name & Dept</th><th class="py-2 text-right">Gross Salary</th><th class="py-2 text-right">30% Limit</th><th class="py-2 text-center">Action</th></tr></thead>
           <tbody id="empTableBody" class="divide-y divide-slate-700/60"></tbody>
-        </table>
-      </div>
-    </section>
-  </main>
+        </table></div>
+      </section>
+    </main>
 
-  <!-- TAB 3: PRODUCT MASTER -->
-  <main id="view-products" class="hidden flex-1 grid grid-cols-12 gap-4 p-4">
-    <section class="col-span-12 lg:col-span-4 bg-slate-800 rounded-lg border border-slate-700 p-5 h-fit">
-      <h2 class="text-base font-bold text-emerald-400 mb-4">Add / Modify Product (Cloud)</h2>
-      <form onsubmit="saveProduct(event)" class="space-y-3 text-sm">
-        <div>
-          <label class="block text-xs text-slate-400 uppercase mb-1">Barcode / SKU *</label>
-          <input id="prodBarcode" type="text" required class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white font-mono">
-        </div>
-        <div>
-          <label class="block text-xs text-slate-400 uppercase mb-1">Product Name *</label>
-          <input id="prodName" type="text" required class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white">
-        </div>
-        <div class="grid grid-cols-2 gap-2">
-          <div>
-            <label class="block text-xs text-slate-400 uppercase mb-1">Cost Price (৳) *</label>
-            <input id="prodCost" type="number" step="0.01" required class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white">
+    <!-- TAB 3: PRODUCT MASTER -->
+    <main id="view-products" class="tab-view hidden flex-1 grid grid-cols-12 gap-4 p-4">
+      <section class="col-span-12 lg:col-span-4 bg-slate-800 rounded-lg border border-slate-700 p-5 h-fit">
+        <h2 class="text-base font-bold text-emerald-400 mb-4">Manage Products</h2>
+        <form onsubmit="saveProduct(event)" class="space-y-3 text-sm">
+          <div><label class="block text-xs text-slate-400 uppercase mb-1">Barcode *</label><input id="prodBarcode" type="text" required class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white font-mono"></div>
+          <div><label class="block text-xs text-slate-400 uppercase mb-1">Product Name *</label><input id="prodName" type="text" required class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white"></div>
+          <div><label class="block text-xs text-slate-400 uppercase mb-1">Fair Price (৳) *</label><input id="prodPrice" type="number" step="0.01" required class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white"></div>
+          <div><label class="block text-xs text-slate-400 uppercase mb-1">Stock Quantity *</label><input id="prodStock" type="number" required class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white"></div>
+          <div class="flex gap-2 pt-2">
+            <button type="submit" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded">Save Product</button>
+            <button type="button" onclick="resetProdForm()" class="bg-slate-700 hover:bg-slate-600 px-4 py-2.5 rounded">Reset</button>
           </div>
-          <div>
-            <label class="block text-xs text-slate-400 uppercase mb-1">Fair Price (৳) *</label>
-            <input id="prodPrice" type="number" step="0.01" required class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white">
-          </div>
-        </div>
-        <div>
-          <label class="block text-xs text-slate-400 uppercase mb-1">Stock Quantity *</label>
-          <input id="prodStock" type="number" required class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white">
-        </div>
-        <div class="flex gap-2 pt-2">
-          <button type="submit" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded">Save Product</button>
-          <button type="button" onclick="resetProdForm()" class="bg-slate-700 hover:bg-slate-600 px-4 py-2.5 rounded">Reset</button>
-        </div>
-      </form>
-    </section>
-
-    <section class="col-span-12 lg:col-span-8 bg-slate-800 rounded-lg border border-slate-700 p-5">
-      <div class="flex justify-between items-center mb-4">
-        <h2 class="text-base font-bold">Product Catalog & Live Stock</h2>
-        <input id="prodSearch" type="text" placeholder="Search Product..." oninput="renderProductsTable()"
-               class="bg-slate-900 border border-slate-600 rounded px-3 py-1.5 text-sm text-white w-64">
-      </div>
-      <div class="overflow-x-auto">
-        <table class="w-full text-left border-collapse text-sm">
-          <thead>
-            <tr class="border-b border-slate-700 text-slate-400 text-xs uppercase">
-              <th class="py-2">Barcode</th>
-              <th class="py-2">Product Name</th>
-              <th class="py-2 text-right">Fair Price</th>
-              <th class="py-2 text-center">In Stock</th>
-              <th class="py-2 text-center">Modify</th>
-            </tr>
-          </thead>
+        </form>
+      </section>
+      <section class="col-span-12 lg:col-span-8 bg-slate-800 rounded-lg border border-slate-700 p-5">
+        <h2 class="text-base font-bold mb-4">Product Catalog</h2>
+        <div class="overflow-x-auto"><table class="w-full text-left border-collapse text-sm">
+          <thead><tr class="border-b border-slate-700 text-slate-400 text-xs uppercase"><th class="py-2">Barcode</th><th class="py-2">Name</th><th class="py-2 text-right">Price</th><th class="py-2 text-center">Stock</th><th class="py-2 text-center">Action</th></tr></thead>
           <tbody id="prodTableBody" class="divide-y divide-slate-700/60"></tbody>
-        </table>
-      </div>
-    </section>
-  </main>
+        </table></div>
+      </section>
+    </main>
 
-  <!-- TAB 4: SALES LEDGER -->
-  <main id="view-reports" class="hidden flex-1 p-4 space-y-4">
-    <div class="bg-slate-800 p-4 rounded-lg border border-slate-700 flex justify-between items-center">
-      <div>
-        <h2 class="text-base font-bold">Realtime Sales & Purchase Ledger</h2>
-        <p class="text-xs text-slate-400">All invoices synced instantly via Firebase</p>
+    <!-- TAB 4: SALES LEDGER (Sales History & Excel Export) -->
+    <main id="view-sales" class="tab-view hidden flex-1 p-4 space-y-4">
+      <div class="bg-slate-800 p-4 rounded-lg border border-slate-700 flex justify-between items-center">
+        <div>
+          <h2 class="text-base font-bold">Sales Ledger & Invoice History</h2>
+          <p class="text-xs text-slate-400">All checkout invoices across counters</p>
+        </div>
+        <button onclick="exportSalesCSV()" class="bg-emerald-600 hover:bg-emerald-500 px-4 py-2 rounded text-xs font-bold text-white">📥 Export Sales to Excel (CSV)</button>
       </div>
-    </div>
-    <div class="bg-slate-800 p-5 rounded-lg border border-slate-700">
-      <div class="overflow-x-auto">
-        <table class="w-full text-left border-collapse text-sm">
-          <thead>
-            <tr class="border-b border-slate-700 text-slate-400 text-xs uppercase">
-              <th class="py-2">Invoice #</th>
-              <th class="py-2">Date & Time</th>
-              <th class="py-2">Emp ID</th>
-              <th class="py-2">Employee Name</th>
-              <th class="py-2">Items Purchased</th>
-              <th class="py-2 text-right">Total (BDT)</th>
-            </tr>
-          </thead>
+      <div class="bg-slate-800 p-5 rounded-lg border border-slate-700">
+        <div class="overflow-x-auto"><table class="w-full text-left border-collapse text-sm">
+          <thead><tr class="border-b border-slate-700 text-slate-400 text-xs uppercase"><th class="py-2">Invoice #</th><th class="py-2">Date & Time</th><th class="py-2">Emp ID</th><th class="py-2">Employee Name</th><th class="py-2">Items</th><th class="py-2 text-right">Total (৳)</th></tr></thead>
           <tbody id="salesTableBody" class="divide-y divide-slate-700/60"></tbody>
-        </table>
+        </table></div>
       </div>
-    </div>
-  </main>
+    </main>
+
+    <!-- TAB 5: USER & PERMISSION MANAGEMENT -->
+    <main id="view-users" class="tab-view hidden flex-1 grid grid-cols-12 gap-4 p-4">
+      <section class="col-span-12 lg:col-span-5 bg-slate-800 rounded-lg border border-slate-700 p-5 h-fit">
+        <h2 class="text-base font-bold text-emerald-400 mb-4">Create / Edit User & Form Access</h2>
+        <form onsubmit="saveUser(event)" class="space-y-3 text-sm">
+          <div><label class="block text-xs text-slate-400 uppercase mb-1">Username *</label><input id="newUsername" type="text" required class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white font-mono"></div>
+          <div><label class="block text-xs text-slate-400 uppercase mb-1">Password *</label><input id="newPassword" type="text" required class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white"></div>
+          <div><label class="block text-xs text-slate-400 uppercase mb-1">User Role *</label>
+            <select id="newUserRole" class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white">
+              <option value="sales">Sales Executive</option>
+              <option value="payroll">Payroll Executive</option>
+              <option value="accounts">Accounts</option>
+              <option value="admin">Super Admin</option>
+            </select>
+          </div>
+          <div class="border-t border-slate-700 pt-3">
+            <label class="block text-xs uppercase font-bold text-slate-400 mb-2">Form / Tab Permissions:</label>
+            <div class="space-y-1.5 text-xs">
+              <label class="flex items-center gap-2"><input type="checkbox" name="perm" value="pos" checked class="rounded bg-slate-900"> POS Billing Counter</label>
+              <label class="flex items-center gap-2"><input type="checkbox" name="perm" value="employees" class="rounded bg-slate-900"> Employee Master (Payroll)</label>
+              <label class="flex items-center gap-2"><input type="checkbox" name="perm" value="products" class="rounded bg-slate-900"> Product Master (Accounts)</label>
+              <label class="flex items-center gap-2"><input type="checkbox" name="perm" value="sales" class="rounded bg-slate-900"> Sales Ledger & Export</label>
+              <label class="flex items-center gap-2"><input type="checkbox" name="perm" value="users" class="rounded bg-slate-900"> User & Access Control</label>
+              <label class="flex items-center gap-2"><input type="checkbox" name="perm" value="history" class="rounded bg-slate-900"> User Audit History</label>
+            </div>
+          </div>
+          <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded mt-2">Save User</button>
+        </form>
+      </section>
+      <section class="col-span-12 lg:col-span-7 bg-slate-800 rounded-lg border border-slate-700 p-5">
+        <h2 class="text-base font-bold mb-4">System Users List</h2>
+        <div class="overflow-x-auto"><table class="w-full text-left border-collapse text-sm">
+          <thead><tr class="border-b border-slate-700 text-slate-400 text-xs uppercase"><th class="py-2">Username</th><th class="py-2">Role</th><th class="py-2">Allowed Forms</th><th class="py-2 text-center">Action</th></tr></thead>
+          <tbody id="userTableBody" class="divide-y divide-slate-700/60"></tbody>
+        </table></div>
+      </section>
+    </main>
+
+    <!-- TAB 6: USER AUDIT HISTORY -->
+    <main id="view-history" class="tab-view hidden flex-1 p-4 space-y-4">
+      <div class="bg-slate-800 p-4 rounded-lg border border-slate-700 flex justify-between items-center">
+        <div>
+          <h2 class="text-base font-bold">System Activity & User Audit History</h2>
+          <p class="text-xs text-slate-400">Tracks who added, updated, or deleted records</p>
+        </div>
+        <div class="flex gap-2">
+          <button onclick="exportHistoryCSV()" class="bg-emerald-600 hover:bg-emerald-500 px-3 py-1.5 rounded text-xs font-bold text-white">📥 Export Audit Logs to Excel</button>
+          <button onclick="loadHistory()" class="bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded text-xs font-bold">Refresh</button>
+        </div>
+      </div>
+      <div class="bg-slate-800 p-5 rounded-lg border border-slate-700">
+        <div class="overflow-x-auto"><table class="w-full text-left border-collapse text-sm">
+          <thead><tr class="border-b border-slate-700 text-slate-400 text-xs uppercase"><th class="py-2">Timestamp</th><th class="py-2">Username</th><th class="py-2">Action</th><th class="py-2">Details</th></tr></thead>
+          <tbody id="historyTableBody" class="divide-y divide-slate-700/60"></tbody>
+        </table></div>
+      </div>
+    </main>
+  </div>
 
   <!-- RECEIPT MODAL -->
   <div id="receiptModal" class="hidden fixed inset-0 bg-black/75 flex items-center justify-center z-50">
     <div class="bg-white text-black p-6 rounded shadow-lg w-80 font-mono text-xs">
       <div class="text-center border-b border-dashed border-black pb-2 mb-2">
         <h2 class="font-bold text-sm">FACTORY FAIR PRICE SHOP</h2>
-        <p>Realtime Cloud Receipt</p>
-        <p id="rcptDate"></p>
-        <p id="rcptInv"></p>
+        <p id="rcptDate"></p><p id="rcptInv"></p>
       </div>
       <div class="border-b border-dashed border-black pb-2 mb-2">
         <p><strong>Emp ID:</strong> <span id="rcptEmpId"></span></p>
         <p><strong>Name:</strong> <span id="rcptEmpName"></span></p>
-        <p><strong>Dept:</strong> <span id="rcptEmpDept"></span></p>
       </div>
       <div id="rcptItems" class="space-y-1 border-b border-dashed border-black pb-2 mb-2"></div>
-      <div class="space-y-1 border-b border-dashed border-black pb-2 mb-2">
-        <div class="flex justify-between font-bold text-sm"><span>INVOICE TOTAL:</span><span id="rcptTotal"></span></div>
-        <div class="flex justify-between font-bold"><span>Remaining Credit:</span><span id="rcptRemaining"></span></div>
-      </div>
-      <div class="mt-4 flex gap-2">
-        <button onclick="window.print()" class="flex-1 bg-emerald-600 text-white font-bold py-2 rounded">Print</button>
-        <button onclick="document.getElementById('receiptModal').classList.add('hidden')" class="flex-1 bg-slate-800 text-white py-2 rounded">Close</button>
+      <div class="flex justify-between font-bold text-sm mb-4"><span>TOTAL:</span><span id="rcptTotal"></span></div>
+      <div class="flex gap-2">
+        <button onclick="window.print()" class="flex-1 bg-emerald-600 text-white py-1 rounded">Print</button>
+        <button onclick="document.getElementById('receiptModal').classList.add('hidden')" class="flex-1 bg-slate-800 text-white py-1 rounded">Close</button>
       </div>
     </div>
   </div>
 
-  <!-- APPLICATION JAVASCRIPT LOGIC -->
+  <!-- FIREBASE APP LOGIC -->
   <script>
     let db, ref, set, get, update, remove, onValue, push, child;
-    let employees = {};
-    let products = {};
-    let sales = {};
-    let currentPosEmp = null;
-    let posCart = [];
+    let currentUser = null;
+    let employees = {}, products = {}, users = {}, sales = {}, auditLogsCache = [];
+    let currentPosEmp = null, posCart = [];
+
+    const tabNames = {
+      pos: "1. POS Counter",
+      employees: "2. Employee Master",
+      products: "3. Product Master",
+      sales: "4. Sales Ledger",
+      users: "5. User Access Control",
+      history: "6. Audit History"
+    };
 
     window.initializeAppReady = function() {
       const fb = window.dbRefs;
       db = fb.db; ref = fb.ref; set = fb.set; get = fb.get; update = fb.update; remove = fb.remove; onValue = fb.onValue; push = fb.push; child = fb.child;
 
-      document.getElementById('syncStatus').innerText = 'Connected to Firebase Realtime Database ✅';
-      document.getElementById('syncStatus').className = 'text-xs text-emerald-400 font-semibold';
-
-      // Listen to Realtime Updates from Firebase
-      onValue(ref(db, 'employees'), (snapshot) => {
-        employees = snapshot.val() || {};
-        populateDropdowns();
-        renderEmployeesTable();
-        if (currentPosEmp) {
-          currentPosEmp = employees[currentPosEmp.empIdKey] || null;
-          renderPosState();
+      // Seed Default Admin
+      get(child(ref(db), 'users')).then((snapshot) => {
+        if (!snapshot.exists()) {
+          set(ref(db, 'users/admin'), {
+            username: 'admin',
+            password: 'admin123',
+            role: 'admin',
+            permissions: { pos: true, employees: true, products: true, sales: true, users: true, history: true }
+          });
         }
       });
 
-      onValue(ref(db, 'products'), (snapshot) => {
-        products = snapshot.val() || {};
-        populateDropdowns();
-        renderProductsTable();
+      // Realtime Listeners (Global sync for Employees, Products, Sales)
+      onValue(ref(db, 'employees'), (snap) => { 
+        employees = snap.val() || {}; 
+        populateDropdowns(); 
+        renderEmployeesTable(); 
       });
 
-      onValue(ref(db, 'sales'), (snapshot) => {
-        sales = snapshot.val() || {};
-        renderSalesTable();
+      onValue(ref(db, 'products'), (snap) => { 
+        products = snap.val() || {}; 
+        populateDropdowns(); 
+        renderProductsTable(); 
+      });
+
+      onValue(ref(db, 'sales'), (snap) => { 
+        sales = snap.val() || {}; 
+        renderSalesTable(); 
+      });
+
+      onValue(ref(db, 'users'), (snap) => { 
+        users = snap.val() || {}; 
+        renderUsersTable(); 
       });
     };
 
-    function switchTab(tab) {
-      ['pos', 'employees', 'products', 'reports'].forEach(t => {
-        document.getElementById('view-' + t).classList.add('hidden');
-        document.getElementById('tab-' + t).className = 'px-4 py-2 rounded text-sm font-semibold bg-slate-700 text-slate-300';
-      });
-      document.getElementById('view-' + tab).classList.remove('hidden');
-      document.getElementById('tab-' + tab).className = 'px-4 py-2 rounded text-sm font-semibold bg-emerald-600 text-white';
+    async function handleLogin(e) {
+      e.preventDefault();
+      const u = document.getElementById('loginUser').value.trim();
+      const p = document.getElementById('loginPass').value.trim();
+
+      const snap = await get(child(ref(db), `users/${u}`));
+      if (snap.exists() && snap.val().password === p) {
+        currentUser = snap.val();
+        currentUser.username = u;
+        document.getElementById('loginModal').classList.add('hidden');
+        document.getElementById('appContainer').classList.remove('hidden');
+        document.getElementById('loggedUserName').innerText = currentUser.username;
+        document.getElementById('loggedUserRole').innerText = currentUser.role;
+        setupNavigation();
+        logAction('LOGIN', `User ${currentUser.username} logged in.`);
+      } else {
+        alert('Invalid username or password!');
+      }
     }
 
+    function logout() {
+      currentUser = null;
+      document.getElementById('appContainer').classList.add('hidden');
+      document.getElementById('loginModal').classList.remove('hidden');
+    }
+
+    function setupNavigation() {
+      const nav = document.getElementById('navTabs');
+      nav.innerHTML = '';
+      const perms = currentUser.permissions || {};
+      
+      let firstTab = null;
+      Object.keys(tabNames).forEach(tabKey => {
+        if (currentUser.role === 'admin' || perms[tabKey]) {
+          if (!firstTab) firstTab = tabKey;
+          nav.innerHTML += `<button onclick="switchTab('${tabKey}')" id="tab-${tabKey}" class="px-4 py-2 rounded text-sm font-semibold bg-slate-700 text-slate-300">${tabNames[tabKey]}</button>`;
+        }
+      });
+      if (firstTab) switchTab(firstTab);
+    }
+
+    function switchTab(tab) {
+      document.querySelectorAll('.tab-view').forEach(v => v.classList.add('hidden'));
+      document.querySelectorAll('#navTabs button').forEach(b => b.className = 'px-4 py-2 rounded text-sm font-semibold bg-slate-700 text-slate-300');
+      
+      const view = document.getElementById('view-' + tab);
+      if (view) view.classList.remove('hidden');
+      const btn = document.getElementById('tab-' + tab);
+      if (btn) btn.className = 'px-4 py-2 rounded text-sm font-semibold bg-emerald-600 text-white';
+      if (tab === 'history') loadHistory();
+    }
+
+    async function logAction(action, details) {
+      if (!currentUser) return;
+      await push(ref(db, 'audit_logs'), {
+        timestamp: new Date().toLocaleString(),
+        username: currentUser.username,
+        action,
+        details
+      });
+    }
+
+    // POS LOGIC
     function populateDropdowns() {
       const empSel = document.getElementById('posEmpDropdown');
-      empSel.innerHTML = '<option value="">-- Choose Employee --</option>';
-      Object.keys(employees).forEach(key => {
-        const e = employees[key];
-        const avail = (e.gross_salary * 0.30) - (e.spent || 0);
-        empSel.innerHTML += `<option value="${key}">${e.id} - ${e.name} (Avail: ৳${avail.toFixed(0)})</option>`;
-      });
-
+      if (empSel) {
+        empSel.innerHTML = '<option value="">-- Choose Employee --</option>';
+        Object.keys(employees).forEach(key => {
+          const e = employees[key];
+          const avail = (e.gross_salary * 0.30) - (e.spent || 0);
+          empSel.innerHTML += `<option value="${key}">${e.id} - ${e.name} (Avail: ৳${avail.toFixed(0)})</option>`;
+        });
+      }
       const prodSel = document.getElementById('posProductSelect');
-      prodSel.innerHTML = '<option value="">-- Choose Product --</option>';
-      Object.keys(products).forEach(key => {
-        const p = products[key];
-        prodSel.innerHTML += `<option value="${key}">${p.name} - ৳${p.price} (Stock: ${p.stock})</option>`;
-      });
+      if (prodSel) {
+        prodSel.innerHTML = '<option value="">-- Choose Product --</option>';
+        Object.keys(products).forEach(key => {
+          const p = products[key];
+          prodSel.innerHTML += `<option value="${key}">${p.name} - ৳${p.price} (Stock: ${p.stock})</option>`;
+        });
+      }
     }
 
-    // POS FUNCTIONS
     function lookupPosEmployee() {
       const inputId = document.getElementById('posEmpInput').value.trim().toUpperCase();
       let foundKey = null;
-      Object.keys(employees).forEach(k => {
-        if (employees[k].id.toUpperCase() === inputId) foundKey = k;
-      });
-
-      if (!foundKey) return alert('Employee ID not found in Firebase!');
+      Object.keys(employees).forEach(k => { if (employees[k].id.toUpperCase() === inputId) foundKey = k; });
+      if (!foundKey) return alert('Employee ID not found!');
       currentPosEmp = employees[foundKey];
-      currentPosEmp.empIdKey = foundKey;
-      document.getElementById('posEmpDropdown').value = foundKey;
-      renderPosState();
-      document.getElementById('posBarcodeInput').focus();
-    }
-
-    function selectPosEmployeeDropdown(key) {
-      if (!key) return;
-      currentPosEmp = employees[key];
-      currentPosEmp.empIdKey = key;
-      document.getElementById('posEmpInput').value = currentPosEmp.id;
+      currentPosEmp.empKey = foundKey;
       renderPosState();
     }
 
@@ -416,43 +431,19 @@
     function scanBarcode() {
       const code = document.getElementById('posBarcodeInput').value.trim();
       let foundKey = null;
-      Object.keys(products).forEach(k => {
-        if (products[k].barcode === code) foundKey = k;
-      });
-      if (foundKey) {
-        addProductToCart(foundKey);
-        document.getElementById('posBarcodeInput').value = '';
-      } else {
-        alert('Product barcode not found!');
-      }
+      Object.keys(products).forEach(k => { if (products[k].barcode === code) foundKey = k; });
+      if (foundKey) { addProductToCart(foundKey); document.getElementById('posBarcodeInput').value = ''; }
+      else alert('Barcode not found!');
     }
 
     function addProductToCart(prodKey) {
       if (!currentPosEmp) return alert('Load Employee ID first!');
-      if (!currentPosEmp.active) return alert('Employee is BLOCKED!');
       const prod = products[prodKey];
-
       const existing = posCart.find(c => c.prodKey === prodKey);
       const nextQty = (existing ? existing.qty : 0) + 1;
       if (nextQty > prod.stock) return alert(`Insufficient stock! Available: ${prod.stock}`);
-
       if (existing) existing.qty += 1;
       else posCart.push({ prodKey, barcode: prod.barcode, name: prod.name, price: Number(prod.price), qty: 1 });
-      renderPosState();
-    }
-
-    function changeQty(idx, delta) {
-      const item = posCart[idx];
-      const prod = products[item.prodKey];
-      const next = item.qty + delta;
-      if (next <= 0) posCart.splice(idx, 1);
-      else if (prod && next > prod.stock) alert(`Max stock is ${prod.stock}`);
-      else item.qty = next;
-      renderPosState();
-    }
-
-    function clearPosCart() {
-      posCart = [];
       renderPosState();
     }
 
@@ -460,199 +451,131 @@
       const tbody = document.getElementById('posCartBody');
       tbody.innerHTML = '';
       let cartTotal = 0;
-
       posCart.forEach((item, i) => {
         const sub = item.price * item.qty;
         cartTotal += sub;
-        tbody.innerHTML += `
-          <tr>
-            <td class="py-2">${i + 1}</td>
-            <td class="py-2 font-mono text-xs">${item.barcode}</td>
-            <td class="py-2 font-semibold">${item.name}</td>
-            <td class="py-2">৳ ${item.price.toFixed(2)}</td>
-            <td class="py-2 text-center space-x-1">
-              <button onclick="changeQty(${i}, -1)" class="bg-slate-700 px-2 rounded">-</button>
-              <span class="px-2 font-bold">${item.qty}</span>
-              <button onclick="changeQty(${i}, 1)" class="bg-slate-700 px-2 rounded">+</button>
-            </td>
-            <td class="py-2 text-right font-bold">৳ ${sub.toFixed(2)}</td>
-            <td class="py-2 text-center"><button onclick="changeQty(${i}, -9999)" class="text-rose-400 text-xs">Remove</button></td>
-          </tr>`;
+        tbody.innerHTML += `<tr><td class="py-2">${i+1}</td><td class="py-2 font-mono text-xs">${item.barcode}</td><td class="py-2">${item.name}</td><td class="py-2">৳${item.price}</td><td class="py-2 text-center">${item.qty}</td><td class="py-2 text-right">৳${sub}</td><td class="py-2 text-center"><button onclick="posCart.splice(${i},1);renderPosState()" class="text-rose-400 text-xs">Remove</button></td></tr>`;
       });
-
       document.getElementById('posCartTotal').innerText = `৳ ${cartTotal.toFixed(2)}`;
-      const btn = document.getElementById('posCheckoutBtn');
-      const statusText = document.getElementById('posStatusText');
-
-      if (!currentPosEmp) { btn.disabled = true; return; }
-
+      if (!currentPosEmp) return;
       const spent = currentPosEmp.spent || 0;
       const maxLimit = currentPosEmp.gross_salary * 0.30;
-      const opening  = maxLimit - spent;
-      const rem      = opening - cartTotal;
-      const pct      = maxLimit > 0 ? Math.min(100, Math.round(((spent + cartTotal) / maxLimit) * 100)) : 0;
-
-      document.getElementById('posEmpName').innerText = `${currentPosEmp.name} (${currentPosEmp.id})`;
-      document.getElementById('posEmpStatus').innerText = currentPosEmp.active ? 'ACTIVE' : 'BLOCKED';
-      document.getElementById('posEmpMeta').innerText = `${currentPosEmp.dept} • Gross: ৳${currentPosEmp.gross_salary.toFixed(2)}`;
-
-      document.getElementById('meterGross').innerText = `৳ ${currentPosEmp.gross_salary.toFixed(2)}`;
+      const rem = (maxLimit - spent) - cartTotal;
       document.getElementById('meterLimit').innerText = `৳ ${maxLimit.toFixed(2)}`;
       document.getElementById('meterSpent').innerText = `- ৳ ${spent.toFixed(2)}`;
-      document.getElementById('meterOpening').innerText = `৳ ${opening.toFixed(2)}`;
-      document.getElementById('meterCart').innerText = `- ৳ ${cartTotal.toFixed(2)}`;
       document.getElementById('meterRemaining').innerText = `৳ ${rem.toFixed(2)}`;
-      document.getElementById('meterPercent').innerText = `${pct}%`;
-      document.getElementById('meterBar').style.width = `${pct}%`;
-
-      if (rem < 0) {
-        btn.disabled = true;
-        document.getElementById('meterRemaining').className = 'text-3xl font-extrabold text-rose-500';
-        statusText.className = 'text-sm font-bold text-rose-400';
-        statusText.innerText = `30% LIMIT EXCEEDED BY ৳ ${Math.abs(rem).toFixed(2)}!`;
-      } else {
-        btn.disabled = posCart.length === 0 || !currentPosEmp.active;
-        document.getElementById('meterRemaining').className = 'text-3xl font-extrabold text-emerald-400';
-        statusText.className = 'text-sm font-semibold text-emerald-400';
-        statusText.innerText = posCart.length > 0 ? 'Within 30% Salary Limit — Ready to Bill' : 'Scan items to add.';
-      }
+      document.getElementById('posCheckoutBtn').disabled = rem < 0 || posCart.length === 0;
     }
 
     async function completePosCheckout() {
-      if (!currentPosEmp || posCart.length === 0) return;
       const cartTotal = posCart.reduce((s, i) => s + (i.price * i.qty), 0);
-      const maxLimit = currentPosEmp.gross_salary * 0.30;
-      const spent = currentPosEmp.spent || 0;
-
-      if ((spent + cartTotal) > maxLimit) {
-        alert('Checkout blocked: 30% limit exceeded!');
-        return;
-      }
-
-      // Update Stock in Firebase
       for (const item of posCart) {
-        const prod = products[item.prodKey];
-        const newStock = prod.stock - item.qty;
-        await update(ref(db, `products/${item.prodKey}`), { stock: newStock });
+        await update(ref(db, `products/${item.prodKey}`), { stock: products[item.prodKey].stock - item.qty });
       }
-
-      // Update Employee Spent in Firebase
-      const newSpent = spent + cartTotal;
-      await update(ref(db, `employees/${currentPosEmp.empIdKey}`), { spent: newSpent });
-
-      // Save Sale in Firebase
+      const newSpent = (currentPosEmp.spent || 0) + cartTotal;
+      await update(ref(db, `employees/${currentPosEmp.empKey}`), { spent: newSpent });
+      
       const invNo = 'INV-' + Math.floor(100000 + Math.random() * 900000);
-      const now = new Date().toLocaleString();
       const itemsSummary = posCart.map(i => `${i.name} (x${i.qty})`).join(', ');
 
+      // Save Sale in Firebase
       await push(ref(db, 'sales'), {
         invoiceNo: invNo,
-        date: now,
+        date: new Date().toLocaleString(),
         empId: currentPosEmp.id,
         empName: currentPosEmp.name,
         items: itemsSummary,
-        total: cartTotal
+        total: cartTotal,
+        cashier: currentUser.username
       });
 
-      // Show Receipt
-      document.getElementById('rcptDate').innerText = now;
+      logAction('CHECKOUT', `Invoice ${invNo} generated for Emp ${currentPosEmp.id} amounting ৳${cartTotal}`);
+
+      document.getElementById('rcptDate').innerText = new Date().toLocaleString();
       document.getElementById('rcptInv').innerText = `Invoice: ${invNo}`;
       document.getElementById('rcptEmpId').innerText = currentPosEmp.id;
       document.getElementById('rcptEmpName').innerText = currentPosEmp.name;
-      document.getElementById('rcptEmpDept').innerText = currentPosEmp.dept;
+      document.getElementById('rcptTotal').innerText = `৳ ${cartTotal.toFixed(2)}`;
+      document.getElementById('receiptModal').classList.remove('hidden');
+      posCart = [];
+      renderPosState();
+    }
 
-      const itemsEl = document.getElementById('rcptItems');
-      itemsEl.innerHTML = '';
-      posCart.forEach(i => {
-        itemsEl.innerHTML += `<div class="flex justify-between"><span>${i.name} x${i.qty}</span><span>৳${(i.price*i.qty).toFixed(2)}</span></div>`;
+    // SALES LEDGER & EXCEL EXPORT
+    function renderSalesTable() {
+      const tbody = document.getElementById('salesTableBody');
+      if (!tbody) return;
+      tbody.innerHTML = '';
+      Object.keys(sales).forEach(key => {
+        const s = sales[key];
+        tbody.innerHTML += `<tr><td class="py-2.5 font-mono text-emerald-400">${s.invoiceNo}</td><td class="py-2.5 text-xs text-slate-400">${s.date}</td><td class="py-2.5 font-mono">${s.empId}</td><td class="py-2.5">${s.empName}</td><td class="py-2.5 text-xs text-slate-300">${s.items}</td><td class="py-2.5 text-right font-bold">৳${Number(s.total).toFixed(2)}</td></tr>`;
+      });
+    }
+
+    function exportSalesCSV() {
+      const salesKeys = Object.keys(sales);
+      if (salesKeys.length === 0) return alert('No sales records available to export!');
+      
+      let csv = 'InvoiceNo,DateTime,EmpID,EmployeeName,Items,TotalBDT\n';
+      salesKeys.forEach(k => {
+        const s = sales[k];
+        const cleanItems = (s.items || '').replace(/"/g, '""');
+        csv += `"${s.invoiceNo}","${s.date}","${s.empId}","${s.empName}","${cleanItems}",${s.total}\n`;
       });
 
-      document.getElementById('rcptTotal').innerText = `৳ ${cartTotal.toFixed(2)}`;
-      document.getElementById('rcptRemaining').innerText = `৳ ${(maxLimit - newSpent).toFixed(2)}`;
-      document.getElementById('receiptModal').classList.remove('hidden');
-
-      posCart = [];
+      const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `FairShop_Sales_Report_${new Date().toISOString().slice(0,10)}.csv`;
+      a.click();
     }
 
     // EMPLOYEE CRUD
-    function previewLimit() {
-      const sal = parseFloat(document.getElementById('empSalary').value) || 0;
-      document.getElementById('empLimitPreview').innerText = `Auto 30% Limit: ৳ ${(sal * 0.30).toFixed(2)}`;
-    }
-
     async function saveEmployee(e) {
       e.preventDefault();
       const id = document.getElementById('empId').value.trim().toUpperCase();
       const name = document.getElementById('empName').value.trim();
       const dept = document.getElementById('empDept').value.trim();
       const salary = parseFloat(document.getElementById('empSalary').value);
-      const active = document.getElementById('empActive').value === 'true';
+      const key = document.getElementById('empKey').value || push(ref(db, 'employees')).key;
 
-      // Check if ID exists or create new key
-      let existingKey = null;
-      Object.keys(employees).forEach(k => {
-        if (employees[k].id === id) existingKey = k;
-      });
-
-      const empData = { id, name, dept, gross_salary: salary, active, spent: existingKey ? employees[existingKey].spent || 0 : 0 };
-
-      if (existingKey) {
-        await update(ref(db, `employees/${existingKey}`), empData);
-      } else {
-        await push(ref(db, 'employees'), empData);
-      }
+      await set(ref(db, `employees/${key}`), { id, name, dept, gross_salary: salary, spent: 0 });
+      logAction('EMPLOYEE_SAVE', `Employee ${id} (${name}) saved by ${currentUser.username}`);
       resetEmpForm();
-      alert('Employee saved to Firebase!');
     }
 
     function editEmployee(key) {
       const e = employees[key];
+      document.getElementById('empKey').value = key;
       document.getElementById('empId').value = e.id;
       document.getElementById('empName').value = e.name;
       document.getElementById('empDept').value = e.dept;
       document.getElementById('empSalary').value = e.gross_salary;
-      document.getElementById('empActive').value = String(e.active);
-      previewLimit();
     }
 
     async function deleteEmployee(key) {
-      if (confirm('Delete this employee from Firebase?')) {
+      if (confirm('Delete employee?')) {
         await remove(ref(db, `employees/${key}`));
+        logAction('EMPLOYEE_DELETE', `Employee deleted by ${currentUser.username}`);
       }
     }
 
     function resetEmpForm() {
+      document.getElementById('empKey').value = '';
       document.getElementById('empId').value = '';
       document.getElementById('empName').value = '';
       document.getElementById('empDept').value = '';
       document.getElementById('empSalary').value = '';
-      document.getElementById('empActive').value = 'true';
-      previewLimit();
     }
 
     function renderEmployeesTable() {
-      const q = (document.getElementById('empSearch')?.value || '').toLowerCase();
       const tbody = document.getElementById('empTableBody');
+      if (!tbody) return;
       tbody.innerHTML = '';
       Object.keys(employees).forEach(key => {
         const e = employees[key];
-        if (e.id.toLowerCase().includes(q) || e.name.toLowerCase().includes(q)) {
-          const lim = e.gross_salary * 0.30;
-          const spent = e.spent || 0;
-          tbody.innerHTML += `
-            <tr>
-              <td class="py-2.5 font-mono text-emerald-400 font-bold">${e.id}</td>
-              <td class="py-2.5"><div>${e.name}</div><div class="text-xs text-slate-400">${e.dept}</div></td>
-              <td class="py-2.5 text-right">৳ ${e.gross_salary.toFixed(2)}</td>
-              <td class="py-2.5 text-right font-semibold">৳ ${lim.toFixed(2)}</td>
-              <td class="py-2.5 text-right text-amber-400">৳ ${spent.toFixed(2)}</td>
-              <td class="py-2.5 text-center">${e.active ? 'ACTIVE' : 'BLOCKED'}</td>
-              <td class="py-2.5 text-center space-x-2">
-                <button onclick="editEmployee('${key}')" class="text-sky-400 text-xs font-bold">Edit</button>
-                <button onclick="deleteEmployee('${key}')" class="text-rose-400 text-xs">Delete</button>
-              </td>
-            </tr>`;
-        }
+        tbody.innerHTML += `<tr><td class="py-2.5 font-mono">${e.id}</td><td class="py-2.5">${e.name}<br><small class="text-slate-400">${e.dept}</small></td><td class="py-2.5 text-right">৳${e.gross_salary}</td><td class="py-2.5 text-right">৳${(e.gross_salary*0.3).toFixed(2)}</td><td class="py-2.5 text-center space-x-2"><button onclick="editEmployee('${key}')" class="text-sky-400 text-xs">Edit</button><button onclick="deleteEmployee('${key}')" class="text-rose-400 text-xs">Delete</button></td></tr>`;
       });
     }
 
@@ -661,83 +584,110 @@
       e.preventDefault();
       const barcode = document.getElementById('prodBarcode').value.trim();
       const name = document.getElementById('prodName').value.trim();
-      const cost = parseFloat(document.getElementById('prodCost').value);
       const price = parseFloat(document.getElementById('prodPrice').value);
       const stock = parseInt(document.getElementById('prodStock').value);
+      let key = null;
+      Object.keys(products).forEach(k => { if (products[k].barcode === barcode) key = k; });
+      if (!key) key = push(ref(db, 'products')).key;
 
-      let existingKey = null;
-      Object.keys(products).forEach(k => {
-        if (products[k].barcode === barcode) existingKey = k;
-      });
-
-      const prodData = { barcode, name, cost, price, stock };
-      if (existingKey) {
-        await update(ref(db, `products/${existingKey}`), prodData);
-      } else {
-        await push(ref(db, 'products'), prodData);
-      }
+      await set(ref(db, `products/${key}`), { barcode, name, price, stock });
+      logAction('PRODUCT_SAVE', `Product ${name} (${barcode}) updated/added by ${currentUser.username}`);
       resetProdForm();
-      alert('Product saved to Firebase!');
     }
 
     function editProduct(key) {
       const p = products[key];
       document.getElementById('prodBarcode').value = p.barcode;
       document.getElementById('prodName').value = p.name;
-      document.getElementById('prodCost').value = p.cost;
       document.getElementById('prodPrice').value = p.price;
       document.getElementById('prodStock').value = p.stock;
     }
 
     async function deleteProduct(key) {
-      if (confirm('Delete product?')) await remove(ref(db, `products/${key}`));
+      if (confirm('Delete product?')) {
+        await remove(ref(db, `products/${key}`));
+        logAction('PRODUCT_DELETE', `Product deleted by ${currentUser.username}`);
+      }
     }
 
     function resetProdForm() {
       document.getElementById('prodBarcode').value = '';
       document.getElementById('prodName').value = '';
-      document.getElementById('prodCost').value = '';
       document.getElementById('prodPrice').value = '';
       document.getElementById('prodStock').value = '';
     }
 
     function renderProductsTable() {
-      const q = (document.getElementById('prodSearch')?.value || '').toLowerCase();
       const tbody = document.getElementById('prodTableBody');
+      if (!tbody) return;
       tbody.innerHTML = '';
       Object.keys(products).forEach(key => {
         const p = products[key];
-        if (p.barcode.toLowerCase().includes(q) || p.name.toLowerCase().includes(q)) {
-          tbody.innerHTML += `
-            <tr>
-              <td class="py-2.5 font-mono">${p.barcode}</td>
-              <td class="py-2.5 font-semibold">${p.name}</td>
-              <td class="py-2.5 text-right text-emerald-400 font-bold">৳ ${p.price.toFixed(2)}</td>
-              <td class="py-2.5 text-center font-bold">${p.stock} pcs</td>
-              <td class="py-2.5 text-center space-x-2">
-                <button onclick="editProduct('${key}')" class="text-sky-400 text-xs font-bold">Edit</button>
-                <button onclick="deleteProduct('${key}')" class="text-rose-400 text-xs">Delete</button>
-              </td>
-            </tr>`;
-          }
+        tbody.innerHTML += `<tr><td class="py-2.5 font-mono">${p.barcode}</td><td class="py-2.5">${p.name}</td><td class="py-2.5 text-right">৳${p.price}</td><td class="py-2.5 text-center">${p.stock}</td><td class="py-2.5 text-center space-x-2"><button onclick="editProduct('${key}')" class="text-sky-400 text-xs">Edit</button><button onclick="deleteProduct('${key}')" class="text-rose-400 text-xs">Delete</button></td></tr>`;
       });
     }
 
-    function renderSalesTable() {
-      const tbody = document.getElementById('salesTableBody');
+    // USER MANAGEMENT
+    async function saveUser(e) {
+      e.preventDefault();
+      const username = document.getElementById('newUsername').value.trim();
+      const password = document.getElementById('newPassword').value.trim();
+      const role = document.getElementById('newUserRole').value;
+      const permissions = {};
+      document.querySelectorAll('input[name="perm"]:checked').forEach(cb => { permissions[cb.value] = true; });
+
+      await set(ref(db, `users/${username}`), { username, password, role, permissions });
+      logAction('USER_SAVE', `User account ${username} created/updated with role ${role}`);
+      alert('User saved successfully!');
+    }
+
+    function renderUsersTable() {
+      const tbody = document.getElementById('userTableBody');
+      if (!tbody) return;
       tbody.innerHTML = '';
-      Object.keys(sales).forEach(key => {
-        const s = sales[key];
-        tbody.innerHTML += `
-          <tr>
-            <td class="py-2 font-mono text-emerald-400">${s.invoiceNo}</td>
-            <td class="py-2 text-xs text-slate-400">${s.date}</td>
-            <td class="py-2 font-mono font-bold">${s.empId}</td>
-            <td class="py-2 font-semibold">${s.empName}</td>
-            <td class="py-2 text-xs text-slate-300">${s.items}</td>
-            <td class="py-2 text-right font-bold">৳ ${Number(s.total).toFixed(2)}</td>
-          </tr>`;
+      Object.keys(users).forEach(u => {
+        const usr = users[u];
+        const allowed = Object.keys(usr.permissions || {}).join(', ');
+        tbody.innerHTML += `<tr><td class="py-2.5 font-mono">${usr.username}</td><td class="py-2.5 uppercase font-semibold text-emerald-400">${usr.role}</td><td class="py-2.5 text-xs text-slate-300">${allowed}</td><td class="py-2.5 text-center"><button onclick="removeUser('${u}')" class="text-rose-400 text-xs">Remove</button></td></tr>`;
       });
+    }
+
+    async function removeUser(username) {
+      if (username === 'admin') return alert('Cannot remove default admin!');
+      if (confirm(`Remove user ${username}?`)) {
+        await remove(ref(db, `users/${username}`));
+        logAction('USER_DELETE', `User ${username} removed by ${currentUser.username}`);
+      }
+    }
+
+    // AUDIT HISTORY & EXCEL EXPORT
+    async function loadHistory() {
+      const snap = await get(child(ref(db), 'audit_logs'));
+      const logs = snap.val() || {};
+      auditLogsCache = Object.values(logs).reverse();
+      
+      const tbody = document.getElementById('historyTableBody');
+      tbody.innerHTML = '';
+      auditLogsCache.forEach(l => {
+        tbody.innerHTML += `<tr><td class="py-2 text-xs text-slate-400">${l.timestamp}</td><td class="py-2 font-mono text-sky-400">${l.username}</td><td class="py-2 font-semibold">${l.action}</td><td class="py-2 text-xs text-slate-300">${l.details}</td></tr>`;
+      });
+    }
+
+    function exportHistoryCSV() {
+      if (auditLogsCache.length === 0) return alert('No history logs available to export!');
+      
+      let csv = 'Timestamp,Username,Action,Details\n';
+      auditLogsCache.forEach(l => {
+        const cleanDetails = (l.details || '').replace(/"/g, '""');
+        csv += `"${l.timestamp}","${l.username}","${l.action}","${cleanDetails}"\n`;
+      });
+
+      const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `FairShop_Audit_History_${new Date().toISOString().slice(0,10)}.csv`;
+      a.click();
     }
   </script>
 </body>
