@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Factory Fair Shop POS (Employee Dropdown Added)</title>
+  <title>Factory Fair Shop POS (Fully Debugged)</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Firebase App & Database SDK -->
   <script type="module">
@@ -106,7 +106,6 @@
             <input id="posEmpInput" type="text" placeholder="EMP-101" onkeydown="if(event.key==='Enter') lookupPosEmployee()" class="flex-1 bg-slate-900 border border-emerald-500 rounded px-3 py-2 text-sm font-mono text-white">
             <button onclick="lookupPosEmployee()" class="bg-emerald-600 hover:bg-emerald-500 px-4 py-2 rounded font-bold text-sm">Load</button>
           </div>
-          <!-- Restored Employee Dropdown Select Box -->
           <div class="mb-3">
             <select id="posEmpDropdown" onchange="selectPosEmployeeDropdown(this.value)" class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-xs text-slate-300">
               <option value="">-- Or Pick Employee From List --</option>
@@ -300,7 +299,7 @@
       const fb = window.dbRefs;
       db = fb.db; ref = fb.ref; set = fb.set; get = fb.get; update = fb.update; remove = fb.remove; onValue = fb.onValue; push = fb.push; child = fb.child;
 
-      // Seed Default Admin
+      // Seed Default Admin & Sample Data if empty
       get(child(ref(db), 'users')).then((snapshot) => {
         if (!snapshot.exists()) {
           set(ref(db, 'users/admin'), {
@@ -309,10 +308,18 @@
             role: 'admin',
             permissions: { pos: true, employees: true, products: true, sales: true, users: true, history: true }
           });
+          
+          // Seed sample employee so EMP-101 immediately works
+          push(ref(db, 'employees'), { id: 'EMP-101', name: 'Sumaiya Akter', dept: 'Sewing - Line 4', gross_salary: 16000, spent: 3500 });
+          push(ref(db, 'employees'), { id: 'EMP-103', name: 'Jahanara Begum', dept: 'Finishing Quality', gross_salary: 14500, spent: 4100 });
+          
+          // Seed sample products
+          push(ref(db, 'products'), { barcode: '89411001', name: 'Miniket Rice 5kg', price: 340, stock: 85 });
+          push(ref(db, 'products'), { barcode: '89411002', name: 'Soybean Oil 2L', price: 330, stock: 60 });
         }
       });
 
-      // Realtime Listeners (Global sync for Employees, Products, Sales)
+      // Realtime Listeners
       onValue(ref(db, 'employees'), (snap) => { 
         employees = snap.val() || {}; 
         populateDropdowns(); 
@@ -398,7 +405,7 @@
       });
     }
 
-    // POS LOGIC
+    // POS LOGIC (Debugged for Firebase Keys)
     function populateDropdowns() {
       const empSel = document.getElementById('posEmpDropdown');
       if (empSel) {
@@ -422,8 +429,10 @@
     function lookupPosEmployee() {
       const inputId = document.getElementById('posEmpInput').value.trim().toUpperCase();
       let foundKey = null;
-      Object.keys(employees).forEach(k => { if (employees[k].id.toUpperCase() === inputId) foundKey = k; });
-      if (!foundKey) return alert('Employee ID not found!');
+      Object.keys(employees).forEach(k => { 
+        if (employees[k].id && employees[k].id.toUpperCase() === inputId) foundKey = k; 
+      });
+      if (!foundKey) return alert('Employee ID not found in database!');
       currentPosEmp = employees[foundKey];
       currentPosEmp.empKey = foundKey;
       document.getElementById('posEmpDropdown').value = foundKey;
@@ -446,7 +455,9 @@
     function scanBarcode() {
       const code = document.getElementById('posBarcodeInput').value.trim();
       let foundKey = null;
-      Object.keys(products).forEach(k => { if (products[k].barcode === code) foundKey = k; });
+      Object.keys(products).forEach(k => { 
+        if (products[k].barcode === code) foundKey = k; 
+      });
       if (foundKey) { addProductToCart(foundKey); document.getElementById('posBarcodeInput').value = ''; }
       else alert('Barcode not found!');
     }
