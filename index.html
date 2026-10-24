@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Factory Fair Shop POS (Employees & Sales Export Fixed)</title>
+  <title>Factory Fair Shop POS (Employee Dropdown Added)</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Firebase App & Database SDK -->
   <script type="module">
@@ -102,9 +102,15 @@
       <section class="col-span-12 lg:col-span-4 flex flex-col gap-4">
         <div class="bg-slate-800 rounded-lg border border-slate-700 p-4">
           <label class="text-xs text-slate-400 uppercase font-bold block mb-1">Employee ID / RFID</label>
-          <div class="flex gap-2 mb-3">
+          <div class="flex gap-2 mb-2">
             <input id="posEmpInput" type="text" placeholder="EMP-101" onkeydown="if(event.key==='Enter') lookupPosEmployee()" class="flex-1 bg-slate-900 border border-emerald-500 rounded px-3 py-2 text-sm font-mono text-white">
             <button onclick="lookupPosEmployee()" class="bg-emerald-600 hover:bg-emerald-500 px-4 py-2 rounded font-bold text-sm">Load</button>
+          </div>
+          <!-- Restored Employee Dropdown Select Box -->
+          <div class="mb-3">
+            <select id="posEmpDropdown" onchange="selectPosEmployeeDropdown(this.value)" class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-xs text-slate-300">
+              <option value="">-- Or Pick Employee From List --</option>
+            </select>
           </div>
           <div class="bg-slate-900 p-3 rounded border border-slate-700">
             <h3 id="posEmpName" class="font-bold text-base text-white">No Employee Loaded</h3>
@@ -178,7 +184,7 @@
       </section>
     </main>
 
-    <!-- TAB 4: SALES LEDGER (Sales History & Excel Export) -->
+    <!-- TAB 4: SALES LEDGER -->
     <main id="view-sales" class="tab-view hidden flex-1 p-4 space-y-4">
       <div class="bg-slate-800 p-4 rounded-lg border border-slate-700 flex justify-between items-center">
         <div>
@@ -396,7 +402,7 @@
     function populateDropdowns() {
       const empSel = document.getElementById('posEmpDropdown');
       if (empSel) {
-        empSel.innerHTML = '<option value="">-- Choose Employee --</option>';
+        empSel.innerHTML = '<option value="">-- Or Pick Employee From List --</option>';
         Object.keys(employees).forEach(key => {
           const e = employees[key];
           const avail = (e.gross_salary * 0.30) - (e.spent || 0);
@@ -420,6 +426,15 @@
       if (!foundKey) return alert('Employee ID not found!');
       currentPosEmp = employees[foundKey];
       currentPosEmp.empKey = foundKey;
+      document.getElementById('posEmpDropdown').value = foundKey;
+      renderPosState();
+    }
+
+    function selectPosEmployeeDropdown(key) {
+      if (!key) return;
+      currentPosEmp = employees[key];
+      currentPosEmp.empKey = key;
+      document.getElementById('posEmpInput').value = currentPosEmp.id;
       renderPosState();
     }
 
@@ -457,7 +472,16 @@
         tbody.innerHTML += `<tr><td class="py-2">${i+1}</td><td class="py-2 font-mono text-xs">${item.barcode}</td><td class="py-2">${item.name}</td><td class="py-2">৳${item.price}</td><td class="py-2 text-center">${item.qty}</td><td class="py-2 text-right">৳${sub}</td><td class="py-2 text-center"><button onclick="posCart.splice(${i},1);renderPosState()" class="text-rose-400 text-xs">Remove</button></td></tr>`;
       });
       document.getElementById('posCartTotal').innerText = `৳ ${cartTotal.toFixed(2)}`;
-      if (!currentPosEmp) return;
+      
+      if (!currentPosEmp) {
+        document.getElementById('posEmpName').innerText = 'No Employee Loaded';
+        document.getElementById('posEmpMeta').innerText = '30% limit verification pending';
+        return;
+      }
+
+      document.getElementById('posEmpName').innerText = `${currentPosEmp.name} (${currentPosEmp.id})`;
+      document.getElementById('posEmpMeta').innerText = `Dept: ${currentPosEmp.dept} • Gross Salary: ৳${currentPosEmp.gross_salary.toFixed(2)}`;
+
       const spent = currentPosEmp.spent || 0;
       const maxLimit = currentPosEmp.gross_salary * 0.30;
       const rem = (maxLimit - spent) - cartTotal;
@@ -478,7 +502,6 @@
       const invNo = 'INV-' + Math.floor(100000 + Math.random() * 900000);
       const itemsSummary = posCart.map(i => `${i.name} (x${i.qty})`).join(', ');
 
-      // Save Sale in Firebase
       await push(ref(db, 'sales'), {
         invoiceNo: invNo,
         date: new Date().toLocaleString(),
