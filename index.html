@@ -2,9 +2,67 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Factory Fair Shop POS (Fully Debugged)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+  <title>Factory Fair Shop POS (Fully Debugged & Responsive)</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+    .font-mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    /* Custom thin scrollbar for tables and horizontal nav on mobile */
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      height: 6px;
+      width: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: #0f172a;
+      border-radius: 4px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 4px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+    }
+    /* Thermal Receipt Print Styling */
+    @media print {
+      body * {
+        visibility: hidden;
+      }
+      #receiptModal, #receiptModal * {
+        visibility: visible;
+      }
+      #receiptModal {
+        position: fixed;
+        inset: 0;
+        background: white !important;
+        display: flex !important;
+        align-items: flex-start;
+        justify-content: center;
+        padding: 0;
+      }
+      #receiptPrintCard {
+        box-shadow: none !important;
+        width: 100% !important;
+        max-width: 300px !important;
+      }
+      .no-print {
+        display: none !important;
+      }
+    }
+  </style>
   <!-- Firebase App & Database SDK -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
@@ -21,194 +79,319 @@
     window.initializeAppReady();
   </script>
 </head>
-<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col font-sans">
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col antialiased selection:bg-emerald-500 selection:text-white">
+
+  <!-- TOAST NOTIFICATION CONTAINER -->
+  <div id="toastContainer" class="fixed top-4 right-4 left-4 sm:left-auto sm:w-96 z-[70] flex flex-col gap-2 pointer-events-none"></div>
+
+  <!-- CUSTOM CONFIRMATION MODAL -->
+  <div id="confirmModal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
+    <div class="bg-slate-800 border border-slate-700 rounded-xl p-6 max-w-sm w-full shadow-2xl transform transition-all">
+      <h3 id="confirmTitle" class="text-lg font-bold text-white mb-2">Confirm Action</h3>
+      <p id="confirmMessage" class="text-sm text-slate-300 mb-6">Are you sure you want to proceed?</p>
+      <div class="flex gap-3 justify-end">
+        <button id="confirmCancelBtn" class="flex-1 sm:flex-none px-4 py-2.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs font-bold transition">Cancel</button>
+        <button id="confirmOkBtn" class="flex-1 sm:flex-none px-4 py-2.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition">Confirm</button>
+      </div>
+    </div>
+  </div>
 
   <!-- LOGIN OVERLAY -->
-  <div id="loginModal" class="fixed inset-0 bg-slate-950 flex items-center justify-center z-50 p-4">
-    <div class="bg-slate-800 border border-slate-700 rounded-xl p-8 max-w-md w-full shadow-2xl">
+  <div id="loginModal" class="fixed inset-0 bg-slate-950 flex items-center justify-center z-50 p-4 overflow-y-auto">
+    <div class="bg-slate-800 border border-slate-700 rounded-2xl p-6 sm:p-8 max-w-md w-full shadow-2xl my-auto">
       <div class="text-center mb-6">
-        <span class="bg-emerald-600 text-white text-xs font-extrabold px-3 py-1 rounded uppercase tracking-wider">SECURE ERP LOGIN</span>
-        <h2 class="text-2xl font-bold mt-3">Fair Shop POS Portal</h2>
-        <p class="text-xs text-slate-400 mt-1">Sign in with your assigned role credentials</p>
+        <span class="inline-block bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 text-xs font-extrabold px-3 py-1 rounded-full uppercase tracking-wider">SECURE ERP LOGIN</span>
+        <h2 class="text-xl sm:text-2xl font-bold mt-3 text-white">Fair Shop POS Portal</h2>
+        <p class="text-xs sm:text-sm text-slate-400 mt-1">Sign in with your assigned role credentials</p>
       </div>
       <form onsubmit="handleLogin(event)" class="space-y-4">
         <div>
-          <label class="block text-xs uppercase font-bold text-slate-400 mb-1">Username</label>
-          <input id="loginUser" type="text" required placeholder="Enter username" class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white">
+          <label class="block text-xs uppercase font-bold text-slate-400 mb-1.5">Username</label>
+          <input id="loginUser" type="text" required placeholder="Enter username (e.g. admin)" class="w-full bg-slate-900 border border-slate-700 focus:border-emerald-500 focus:outline-none rounded-lg px-3.5 py-2.5 text-sm text-white transition">
         </div>
         <div>
-          <label class="block text-xs uppercase font-bold text-slate-400 mb-1">Password</label>
-          <input id="loginPass" type="password" required placeholder="••••••••" class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white">
+          <label class="block text-xs uppercase font-bold text-slate-400 mb-1.5">Password</label>
+          <input id="loginPass" type="password" required placeholder="••••••••" class="w-full bg-slate-900 border border-slate-700 focus:border-emerald-500 focus:outline-none rounded-lg px-3.5 py-2.5 text-sm text-white transition">
         </div>
-        <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded text-sm transition">Sign In</button>
+        <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-bold py-3 rounded-lg text-sm transition shadow-lg shadow-emerald-950/50">Sign In</button>
       </form>
+      <div class="mt-5 pt-4 border-t border-slate-700/70 text-center">
+        <p class="text-[11px] text-slate-400">Default Admin: <span class="font-mono text-slate-300">admin</span> / <span class="font-mono text-slate-300">admin123</span></p>
+      </div>
     </div>
   </div>
 
   <!-- MAIN APP CONTAINER -->
-  <div id="appContainer" class="hidden flex-1 flex flex-col">
+  <div id="appContainer" class="hidden flex-1 flex flex-col max-w-[1600px] w-full mx-auto">
     <!-- TOP NAVBAR -->
-    <header class="bg-slate-800 border-b border-slate-700 px-6 py-3 flex flex-wrap justify-between items-center gap-4">
-      <div class="flex items-center gap-3">
-        <span class="bg-emerald-600 text-white font-extrabold px-3 py-1.5 rounded text-sm">ERP PORTAL</span>
-        <div>
-          <h1 class="font-bold text-base leading-tight">Factory Fair Price Shop</h1>
-          <p class="text-xs text-slate-400">User: <strong id="loggedUserName" class="text-emerald-400"></strong> (<span id="loggedUserRole" class="uppercase text-sky-400"></span>)</p>
+    <header class="bg-slate-800/95 backdrop-blur border-b border-slate-700 sticky top-0 z-40 px-3 sm:px-6 py-3">
+      <div class="flex flex-col gap-3">
+        <!-- Top Row: Brand + User Status + Logout -->
+        <div class="flex items-center justify-between gap-2">
+          <div class="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <span class="bg-emerald-600 text-white font-extrabold px-2.5 py-1.5 rounded-lg text-xs sm:text-sm shrink-0 shadow">ERP</span>
+            <div class="min-w-0">
+              <h1 class="font-bold text-sm sm:text-base leading-tight truncate text-white">Factory Fair Price Shop</h1>
+              <p class="text-[11px] sm:text-xs text-slate-400 truncate">
+                User: <strong id="loggedUserName" class="text-emerald-400"></strong>
+                (<span id="loggedUserRole" class="uppercase text-sky-400 font-semibold"></span>)
+              </p>
+            </div>
+          </div>
+
+          <button onclick="logout()" class="bg-rose-700 hover:bg-rose-600 active:bg-rose-800 px-3 sm:px-4 py-2 rounded-lg text-xs font-bold text-white shrink-0 transition shadow">
+            Sign Out
+          </button>
         </div>
+
+        <!-- Bottom Row: Scrollable Responsive Navigation Tabs -->
+        <nav id="navTabs" class="flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar pb-0.5 -mx-1 px-1"></nav>
       </div>
-
-      <nav id="navTabs" class="flex flex-wrap gap-2"></nav>
-
-      <button onclick="logout()" class="bg-rose-700 hover:bg-rose-600 px-3 py-1.5 rounded text-xs font-bold text-white">Sign Out</button>
     </header>
 
     <!-- TAB 1: POS COUNTER -->
-    <main id="view-pos" class="tab-view hidden flex-1 grid grid-cols-12 gap-4 p-4">
-      <section class="col-span-12 lg:col-span-8 bg-slate-800 rounded-lg border border-slate-700 p-4 flex flex-col justify-between">
+    <main id="view-pos" class="tab-view hidden flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 p-3 sm:p-4 lg:p-6">
+      <!-- Left/Main Column: Product Scan & Shopping Cart -->
+      <section class="lg:col-span-8 bg-slate-800 rounded-xl border border-slate-700 p-3 sm:p-5 flex flex-col justify-between order-2 lg:order-1">
         <div>
-          <div class="grid grid-cols-12 gap-2 mb-4 bg-slate-900 p-3 rounded border border-slate-700">
-            <div class="col-span-5">
-              <label class="text-xs text-slate-400 uppercase block mb-1">Scan Barcode (Enter)</label>
-              <input id="posBarcodeInput" type="text" placeholder="Scan barcode..." onkeydown="if(event.key==='Enter') scanBarcode()" class="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-white">
+          <!-- Responsive Barcode & Product Selector Grid -->
+          <div class="grid grid-cols-1 sm:grid-cols-12 gap-3 mb-4 bg-slate-900 p-3 sm:p-4 rounded-xl border border-slate-700">
+            <div class="sm:col-span-5">
+              <label class="text-[11px] font-semibold text-slate-400 uppercase block mb-1">Scan Barcode (Enter)</label>
+              <input id="posBarcodeInput" type="text" placeholder="Scan or type barcode..." onkeydown="if(event.key==='Enter') scanBarcode()" class="w-full bg-slate-800 border border-slate-600 focus:border-emerald-500 focus:outline-none rounded-lg px-3 py-2.5 text-sm text-white">
             </div>
-            <div class="col-span-5">
-              <label class="text-xs text-slate-400 uppercase block mb-1">Or Select Product</label>
-              <select id="posProductSelect" class="w-full bg-slate-800 border border-slate-600 rounded px-3 py-2 text-sm text-white"></select>
+            <div class="sm:col-span-5">
+              <label class="text-[11px] font-semibold text-slate-400 uppercase block mb-1">Or Select Product</label>
+              <select id="posProductSelect" class="w-full bg-slate-800 border border-slate-600 focus:border-emerald-500 focus:outline-none rounded-lg px-3 py-2.5 text-sm text-white"></select>
             </div>
-            <div class="col-span-2 flex items-end">
-              <button onclick="addSelectedProduct()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 rounded text-sm">+ Add</button>
+            <div class="sm:col-span-2 flex items-end">
+              <button onclick="addSelectedProduct()" class="w-full bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-bold py-2.5 px-4 rounded-lg text-sm transition">+ Add</button>
             </div>
           </div>
-          <div class="overflow-x-auto max-h-96">
-            <table class="w-full text-left border-collapse text-sm">
-              <thead>
-                <tr class="border-b border-slate-700 text-slate-400 text-xs uppercase">
-                  <th class="py-2">#</th><th class="py-2">Barcode</th><th class="py-2">Item Name</th><th class="py-2">Price</th><th class="py-2 text-center">Qty</th><th class="py-2 text-right">Subtotal</th><th class="py-2 text-center">Action</th>
+
+          <!-- Cart Items Table -->
+          <div class="overflow-x-auto custom-scrollbar max-h-[360px] sm:max-h-96 rounded-lg border border-slate-700/60">
+            <table class="w-full text-left border-collapse text-xs sm:text-sm min-w-[520px]">
+              <thead class="bg-slate-900/90 sticky top-0 z-10">
+                <tr class="border-b border-slate-700 text-slate-400 text-[11px] uppercase">
+                  <th class="py-2.5 px-3">#</th>
+                  <th class="py-2.5 px-3">Barcode</th>
+                  <th class="py-2.5 px-3">Item Name</th>
+                  <th class="py-2.5 px-3">Price</th>
+                  <th class="py-2.5 px-3 text-center">Qty</th>
+                  <th class="py-2.5 px-3 text-right">Subtotal</th>
+                  <th class="py-2.5 px-3 text-center">Action</th>
                 </tr>
               </thead>
               <tbody id="posCartBody" class="divide-y divide-slate-700/60"></tbody>
             </table>
           </div>
         </div>
-        <div class="mt-4 p-4 rounded bg-slate-900 border border-slate-700 flex justify-between items-center">
-          <span id="posStatusText" class="text-sm font-semibold text-slate-300">Scan Employee ID to begin billing.</span>
-          <div class="text-right">
+
+        <!-- Cart Footer Summary -->
+        <div class="mt-4 p-3.5 sm:p-4 rounded-xl bg-slate-900 border border-slate-700 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+          <span id="posStatusText" class="text-xs sm:text-sm font-semibold text-slate-300">Scan Employee ID to begin billing.</span>
+          <div class="w-full sm:w-auto flex sm:block justify-between items-center border-t sm:border-t-0 border-slate-800 pt-2 sm:pt-0 text-right">
             <span class="text-xs text-slate-400 uppercase block">Cart Total</span>
-            <span id="posCartTotal" class="text-2xl font-extrabold text-white">৳ 0.00</span>
+            <span id="posCartTotal" class="text-xl sm:text-2xl font-extrabold text-white">৳ 0.00</span>
           </div>
         </div>
       </section>
 
-      <section class="col-span-12 lg:col-span-4 flex flex-col gap-4">
-        <div class="bg-slate-800 rounded-lg border border-slate-700 p-4">
-          <label class="text-xs text-slate-400 uppercase font-bold block mb-1">Employee ID / RFID</label>
-          <div class="flex gap-2 mb-2">
-            <input id="posEmpInput" type="text" placeholder="EMP-101" onkeydown="if(event.key==='Enter') lookupPosEmployee()" class="flex-1 bg-slate-900 border border-emerald-500 rounded px-3 py-2 text-sm font-mono text-white">
-            <button onclick="lookupPosEmployee()" class="bg-emerald-600 hover:bg-emerald-500 px-4 py-2 rounded font-bold text-sm">Load</button>
+      <!-- Right Column: Employee Verification & Credit Meter (Shows on top on mobile for natural workflow) -->
+      <section class="lg:col-span-4 flex flex-col gap-4 order-1 lg:order-2">
+        <div class="bg-slate-800 rounded-xl border border-slate-700 p-4 sm:p-5">
+          <label class="text-xs text-slate-400 uppercase font-bold block mb-1.5">Employee ID / RFID</label>
+          <div class="flex gap-2 mb-2.5">
+            <input id="posEmpInput" type="text" placeholder="EMP-101" onkeydown="if(event.key==='Enter') lookupPosEmployee()" class="flex-1 min-w-0 bg-slate-900 border border-emerald-500 rounded-lg px-3 py-2.5 text-sm font-mono text-white focus:outline-none">
+            <button onclick="lookupPosEmployee()" class="bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 px-4 py-2.5 rounded-lg font-bold text-sm text-white shrink-0 transition">Load</button>
           </div>
           <div class="mb-3">
-            <select id="posEmpDropdown" onchange="selectPosEmployeeDropdown(this.value)" class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-xs text-slate-300">
+            <select id="posEmpDropdown" onchange="selectPosEmployeeDropdown(this.value)" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2.5 text-xs sm:text-sm text-slate-200 focus:border-emerald-500 focus:outline-none">
               <option value="">-- Or Pick Employee From List --</option>
             </select>
           </div>
-          <div class="bg-slate-900 p-3 rounded border border-slate-700">
-            <h3 id="posEmpName" class="font-bold text-base text-white">No Employee Loaded</h3>
+          <div class="bg-slate-900 p-3.5 rounded-xl border border-slate-700">
+            <h3 id="posEmpName" class="font-bold text-sm sm:text-base text-white break-words">No Employee Loaded</h3>
             <p id="posEmpMeta" class="text-xs text-slate-400 mt-1">30% limit verification pending</p>
           </div>
         </div>
-        <div class="bg-slate-800 rounded-lg border border-slate-700 p-4 flex-1 flex flex-col justify-between">
+
+        <div class="bg-slate-800 rounded-xl border border-slate-700 p-4 sm:p-5 flex-1 flex flex-col justify-between gap-4">
           <div>
             <h4 class="text-xs font-bold uppercase text-slate-400 tracking-wider mb-3">Credit Meter</h4>
-            <div class="space-y-2 text-sm">
-              <div class="flex justify-between text-slate-400"><span>30% Max Limit:</span><span id="meterLimit">৳ 0.00</span></div>
-              <div class="flex justify-between text-amber-400"><span>Already Spent:</span><span id="meterSpent">- ৳ 0.00</span></div>
+            <div class="space-y-2.5 text-sm">
+              <div class="flex justify-between text-slate-400">
+                <span>30% Max Limit:</span>
+                <span id="meterLimit" class="font-mono">৳ 0.00</span>
+              </div>
+              <div class="flex justify-between text-amber-400">
+                <span>Already Spent:</span>
+                <span id="meterSpent" class="font-mono">- ৳ 0.00</span>
+              </div>
               <hr class="border-slate-700">
-              <div class="flex justify-between text-slate-200 font-bold"><span>Remaining Balance:</span><span id="meterRemaining" class="text-2xl text-emerald-400">৳ 0.00</span></div>
+              <div class="flex justify-between items-baseline text-slate-200 font-bold pt-1">
+                <span>Remaining Balance:</span>
+                <span id="meterRemaining" class="text-xl sm:text-2xl font-mono text-emerald-400">৳ 0.00</span>
+              </div>
             </div>
           </div>
-          <div class="grid grid-cols-2 gap-2 pt-4 border-t border-slate-700">
-            <button onclick="clearPosCart()" class="bg-slate-700 hover:bg-slate-600 py-3 rounded font-semibold text-sm">Clear</button>
-            <button id="posCheckoutBtn" onclick="completePosCheckout()" disabled class="bg-emerald-600 hover:bg-emerald-500 py-3 rounded font-bold text-sm disabled:opacity-40">Checkout</button>
+
+          <div class="grid grid-cols-2 gap-3 pt-4 border-t border-slate-700">
+            <button onclick="clearPosCart()" class="bg-slate-700 hover:bg-slate-600 active:bg-slate-800 py-3 rounded-lg font-semibold text-sm text-slate-200 transition">Clear</button>
+            <button id="posCheckoutBtn" onclick="completePosCheckout()" disabled class="bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 py-3 rounded-lg font-bold text-sm text-white disabled:opacity-40 disabled:pointer-events-none transition shadow-lg shadow-emerald-950/40">Checkout</button>
           </div>
         </div>
       </section>
     </main>
 
     <!-- TAB 2: EMPLOYEE MASTER -->
-    <main id="view-employees" class="tab-view hidden flex-1 grid grid-cols-12 gap-4 p-4">
-      <section class="col-span-12 lg:col-span-4 bg-slate-800 rounded-lg border border-slate-700 p-5 h-fit">
+    <main id="view-employees" class="tab-view hidden flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 p-3 sm:p-4 lg:p-6">
+      <section class="lg:col-span-4 bg-slate-800 rounded-xl border border-slate-700 p-4 sm:p-5 h-fit">
         <h2 class="text-base font-bold text-emerald-400 mb-4">Manage Employee & Salary</h2>
-        <form onsubmit="saveEmployee(event)" class="space-y-3 text-sm">
+        <form onsubmit="saveEmployee(event)" class="space-y-3.5 text-sm">
           <input type="hidden" id="empKey">
-          <div><label class="block text-xs text-slate-400 uppercase mb-1">Emp ID *</label><input id="empId" type="text" required class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white font-mono"></div>
-          <div><label class="block text-xs text-slate-400 uppercase mb-1">Full Name *</label><input id="empName" type="text" required class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white"></div>
-          <div><label class="block text-xs text-slate-400 uppercase mb-1">Department *</label><input id="empDept" type="text" required class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white"></div>
-          <div><label class="block text-xs text-slate-400 uppercase mb-1">Gross Salary (BDT) *</label><input id="empSalary" type="number" step="0.01" required class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white"></div>
-          <div class="flex gap-2 pt-2">
-            <button type="submit" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded">Save Employee</button>
-            <button type="button" onclick="resetEmpForm()" class="bg-slate-700 hover:bg-slate-600 px-4 py-2.5 rounded">Reset</button>
+          <div>
+            <label class="block text-xs text-slate-400 uppercase font-semibold mb-1">Emp ID *</label>
+            <input id="empId" type="text" required placeholder="e.g. EMP-105" class="w-full bg-slate-900 border border-slate-600 focus:border-emerald-500 focus:outline-none rounded-lg px-3 py-2.5 text-white font-mono">
+          </div>
+          <div>
+            <label class="block text-xs text-slate-400 uppercase font-semibold mb-1">Full Name *</label>
+            <input id="empName" type="text" required placeholder="Employee full name" class="w-full bg-slate-900 border border-slate-600 focus:border-emerald-500 focus:outline-none rounded-lg px-3 py-2.5 text-white">
+          </div>
+          <div>
+            <label class="block text-xs text-slate-400 uppercase font-semibold mb-1">Department *</label>
+            <input id="empDept" type="text" required placeholder="e.g. Sewing - Line 2" class="w-full bg-slate-900 border border-slate-600 focus:border-emerald-500 focus:outline-none rounded-lg px-3 py-2.5 text-white">
+          </div>
+          <div>
+            <label class="block text-xs text-slate-400 uppercase font-semibold mb-1">Gross Salary (BDT) *</label>
+            <input id="empSalary" type="number" step="0.01" required placeholder="e.g. 15000" class="w-full bg-slate-900 border border-slate-600 focus:border-emerald-500 focus:outline-none rounded-lg px-3 py-2.5 text-white">
+          </div>
+          <div class="flex gap-2.5 pt-2">
+            <button type="submit" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-lg transition">Save Employee</button>
+            <button type="button" onclick="resetEmpForm()" class="bg-slate-700 hover:bg-slate-600 px-4 py-2.5 rounded-lg font-semibold transition">Reset</button>
           </div>
         </form>
       </section>
-      <section class="col-span-12 lg:col-span-8 bg-slate-800 rounded-lg border border-slate-700 p-5">
-        <h2 class="text-base font-bold mb-4">Employee Directory</h2>
-        <div class="overflow-x-auto"><table class="w-full text-left border-collapse text-sm">
-          <thead><tr class="border-b border-slate-700 text-slate-400 text-xs uppercase"><th class="py-2">ID</th><th class="py-2">Name & Dept</th><th class="py-2 text-right">Gross Salary</th><th class="py-2 text-right">30% Limit</th><th class="py-2 text-center">Action</th></tr></thead>
-          <tbody id="empTableBody" class="divide-y divide-slate-700/60"></tbody>
-        </table></div>
+
+      <section class="lg:col-span-8 bg-slate-800 rounded-xl border border-slate-700 p-4 sm:p-5 overflow-hidden">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+          <h2 class="text-base font-bold">Employee Directory</h2>
+          <span class="text-xs text-slate-400">Swipe horizontally on small screens to view all columns</span>
+        </div>
+        <div class="overflow-x-auto custom-scrollbar rounded-lg border border-slate-700/60">
+          <table class="w-full text-left border-collapse text-xs sm:text-sm min-w-[540px]">
+            <thead class="bg-slate-900/80">
+              <tr class="border-b border-slate-700 text-slate-400 text-[11px] uppercase">
+                <th class="py-2.5 px-3">ID</th>
+                <th class="py-2.5 px-3">Name & Dept</th>
+                <th class="py-2.5 px-3 text-right">Gross Salary</th>
+                <th class="py-2.5 px-3 text-right">30% Limit</th>
+                <th class="py-2.5 px-3 text-center">Action</th>
+              </tr>
+            </thead>
+            <tbody id="empTableBody" class="divide-y divide-slate-700/60"></tbody>
+          </table>
+        </div>
       </section>
     </main>
 
     <!-- TAB 3: PRODUCT MASTER -->
-    <main id="view-products" class="tab-view hidden flex-1 grid grid-cols-12 gap-4 p-4">
-      <section class="col-span-12 lg:col-span-4 bg-slate-800 rounded-lg border border-slate-700 p-5 h-fit">
+    <main id="view-products" class="tab-view hidden flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 p-3 sm:p-4 lg:p-6">
+      <section class="lg:col-span-4 bg-slate-800 rounded-xl border border-slate-700 p-4 sm:p-5 h-fit">
         <h2 class="text-base font-bold text-emerald-400 mb-4">Manage Products</h2>
-        <form onsubmit="saveProduct(event)" class="space-y-3 text-sm">
-          <div><label class="block text-xs text-slate-400 uppercase mb-1">Barcode *</label><input id="prodBarcode" type="text" required class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white font-mono"></div>
-          <div><label class="block text-xs text-slate-400 uppercase mb-1">Product Name *</label><input id="prodName" type="text" required class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white"></div>
-          <div><label class="block text-xs text-slate-400 uppercase mb-1">Fair Price (৳) *</label><input id="prodPrice" type="number" step="0.01" required class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white"></div>
-          <div><label class="block text-xs text-slate-400 uppercase mb-1">Stock Quantity *</label><input id="prodStock" type="number" required class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white"></div>
-          <div class="flex gap-2 pt-2">
-            <button type="submit" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded">Save Product</button>
-            <button type="button" onclick="resetProdForm()" class="bg-slate-700 hover:bg-slate-600 px-4 py-2.5 rounded">Reset</button>
+        <form onsubmit="saveProduct(event)" class="space-y-3.5 text-sm">
+          <div>
+            <label class="block text-xs text-slate-400 uppercase font-semibold mb-1">Barcode *</label>
+            <input id="prodBarcode" type="text" required placeholder="e.g. 89411003" class="w-full bg-slate-900 border border-slate-600 focus:border-emerald-500 focus:outline-none rounded-lg px-3 py-2.5 text-white font-mono">
+          </div>
+          <div>
+            <label class="block text-xs text-slate-400 uppercase font-semibold mb-1">Product Name *</label>
+            <input id="prodName" type="text" required placeholder="e.g. Masoor Dal 1kg" class="w-full bg-slate-900 border border-slate-600 focus:border-emerald-500 focus:outline-none rounded-lg px-3 py-2.5 text-white">
+          </div>
+          <div>
+            <label class="block text-xs text-slate-400 uppercase font-semibold mb-1">Fair Price (৳) *</label>
+            <input id="prodPrice" type="number" step="0.01" required placeholder="e.g. 130" class="w-full bg-slate-900 border border-slate-600 focus:border-emerald-500 focus:outline-none rounded-lg px-3 py-2.5 text-white">
+          </div>
+          <div>
+            <label class="block text-xs text-slate-400 uppercase font-semibold mb-1">Stock Quantity *</label>
+            <input id="prodStock" type="number" required placeholder="e.g. 100" class="w-full bg-slate-900 border border-slate-600 focus:border-emerald-500 focus:outline-none rounded-lg px-3 py-2.5 text-white">
+          </div>
+          <div class="flex gap-2.5 pt-2">
+            <button type="submit" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-lg transition">Save Product</button>
+            <button type="button" onclick="resetProdForm()" class="bg-slate-700 hover:bg-slate-600 px-4 py-2.5 rounded-lg font-semibold transition">Reset</button>
           </div>
         </form>
       </section>
-      <section class="col-span-12 lg:col-span-8 bg-slate-800 rounded-lg border border-slate-700 p-5">
-        <h2 class="text-base font-bold mb-4">Product Catalog</h2>
-        <div class="overflow-x-auto"><table class="w-full text-left border-collapse text-sm">
-          <thead><tr class="border-b border-slate-700 text-slate-400 text-xs uppercase"><th class="py-2">Barcode</th><th class="py-2">Name</th><th class="py-2 text-right">Price</th><th class="py-2 text-center">Stock</th><th class="py-2 text-center">Action</th></tr></thead>
-          <tbody id="prodTableBody" class="divide-y divide-slate-700/60"></tbody>
-        </table></div>
+
+      <section class="lg:col-span-8 bg-slate-800 rounded-xl border border-slate-700 p-4 sm:p-5 overflow-hidden">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+          <h2 class="text-base font-bold">Product Catalog</h2>
+          <span class="text-xs text-slate-400">Tap Edit to load product details into form</span>
+        </div>
+        <div class="overflow-x-auto custom-scrollbar rounded-lg border border-slate-700/60">
+          <table class="w-full text-left border-collapse text-xs sm:text-sm min-w-[500px]">
+            <thead class="bg-slate-900/80">
+              <tr class="border-b border-slate-700 text-slate-400 text-[11px] uppercase">
+                <th class="py-2.5 px-3">Barcode</th>
+                <th class="py-2.5 px-3">Name</th>
+                <th class="py-2.5 px-3 text-right">Price</th>
+                <th class="py-2.5 px-3 text-center">Stock</th>
+                <th class="py-2.5 px-3 text-center">Action</th>
+              </tr>
+            </thead>
+            <tbody id="prodTableBody" class="divide-y divide-slate-700/60"></tbody>
+          </table>
+        </div>
       </section>
     </main>
 
     <!-- TAB 4: SALES LEDGER -->
-    <main id="view-sales" class="tab-view hidden flex-1 p-4 space-y-4">
-      <div class="bg-slate-800 p-4 rounded-lg border border-slate-700 flex justify-between items-center">
+    <main id="view-sales" class="tab-view hidden flex-1 p-3 sm:p-4 lg:p-6 space-y-4">
+      <div class="bg-slate-800 p-4 sm:p-5 rounded-xl border border-slate-700 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
           <h2 class="text-base font-bold">Sales Ledger & Invoice History</h2>
           <p class="text-xs text-slate-400">All checkout invoices across counters</p>
         </div>
-        <button onclick="exportSalesCSV()" class="bg-emerald-600 hover:bg-emerald-500 px-4 py-2 rounded text-xs font-bold text-white">📥 Export Sales to Excel (CSV)</button>
+        <button onclick="exportSalesCSV()" class="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 px-4 py-2.5 rounded-lg text-xs font-bold text-white transition text-center">
+          📥 Export Sales to Excel (CSV)
+        </button>
       </div>
-      <div class="bg-slate-800 p-5 rounded-lg border border-slate-700">
-        <div class="overflow-x-auto"><table class="w-full text-left border-collapse text-sm">
-          <thead><tr class="border-b border-slate-700 text-slate-400 text-xs uppercase"><th class="py-2">Invoice #</th><th class="py-2">Date & Time</th><th class="py-2">Emp ID</th><th class="py-2">Employee Name</th><th class="py-2">Items</th><th class="py-2 text-right">Total (৳)</th></tr></thead>
-          <tbody id="salesTableBody" class="divide-y divide-slate-700/60"></tbody>
-        </table></div>
+      <div class="bg-slate-800 p-4 sm:p-5 rounded-xl border border-slate-700 overflow-hidden">
+        <div class="overflow-x-auto custom-scrollbar rounded-lg border border-slate-700/60">
+          <table class="w-full text-left border-collapse text-xs sm:text-sm min-w-[640px]">
+            <thead class="bg-slate-900/80">
+              <tr class="border-b border-slate-700 text-slate-400 text-[11px] uppercase">
+                <th class="py-2.5 px-3">Invoice #</th>
+                <th class="py-2.5 px-3">Date & Time</th>
+                <th class="py-2.5 px-3">Emp ID</th>
+                <th class="py-2.5 px-3">Employee Name</th>
+                <th class="py-2.5 px-3">Items</th>
+                <th class="py-2.5 px-3 text-right">Total (৳)</th>
+              </tr>
+            </thead>
+            <tbody id="salesTableBody" class="divide-y divide-slate-700/60"></tbody>
+          </table>
+        </div>
       </div>
     </main>
 
     <!-- TAB 5: USER & PERMISSION MANAGEMENT -->
-    <main id="view-users" class="tab-view hidden flex-1 grid grid-cols-12 gap-4 p-4">
-      <section class="col-span-12 lg:col-span-5 bg-slate-800 rounded-lg border border-slate-700 p-5 h-fit">
+    <main id="view-users" class="tab-view hidden flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 p-3 sm:p-4 lg:p-6">
+      <section class="lg:col-span-5 bg-slate-800 rounded-xl border border-slate-700 p-4 sm:p-5 h-fit">
         <h2 class="text-base font-bold text-emerald-400 mb-4">Create / Edit User & Form Access</h2>
-        <form onsubmit="saveUser(event)" class="space-y-3 text-sm">
-          <div><label class="block text-xs text-slate-400 uppercase mb-1">Username *</label><input id="newUsername" type="text" required class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white font-mono"></div>
-          <div><label class="block text-xs text-slate-400 uppercase mb-1">Password *</label><input id="newPassword" type="text" required class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white"></div>
-          <div><label class="block text-xs text-slate-400 uppercase mb-1">User Role *</label>
-            <select id="newUserRole" class="w-full bg-slate-900 border border-slate-600 rounded px-3 py-2 text-white">
+        <form onsubmit="saveUser(event)" class="space-y-3.5 text-sm">
+          <div>
+            <label class="block text-xs text-slate-400 uppercase font-semibold mb-1">Username *</label>
+            <input id="newUsername" type="text" required placeholder="e.g. cashier1" class="w-full bg-slate-900 border border-slate-600 focus:border-emerald-500 focus:outline-none rounded-lg px-3 py-2.5 text-white font-mono">
+          </div>
+          <div>
+            <label class="block text-xs text-slate-400 uppercase font-semibold mb-1">Password *</label>
+            <input id="newPassword" type="text" required placeholder="Assign password" class="w-full bg-slate-900 border border-slate-600 focus:border-emerald-500 focus:outline-none rounded-lg px-3 py-2.5 text-white">
+          </div>
+          <div>
+            <label class="block text-xs text-slate-400 uppercase font-semibold mb-1">User Role *</label>
+            <select id="newUserRole" class="w-full bg-slate-900 border border-slate-600 focus:border-emerald-500 focus:outline-none rounded-lg px-3 py-2.5 text-white">
               <option value="sales">Sales Executive</option>
               <option value="payroll">Payroll Executive</option>
               <option value="accounts">Accounts</option>
@@ -216,65 +399,110 @@
             </select>
           </div>
           <div class="border-t border-slate-700 pt-3">
-            <label class="block text-xs uppercase font-bold text-slate-400 mb-2">Form / Tab Permissions:</label>
-            <div class="space-y-1.5 text-xs">
-              <label class="flex items-center gap-2"><input type="checkbox" name="perm" value="pos" checked class="rounded bg-slate-900"> POS Billing Counter</label>
-              <label class="flex items-center gap-2"><input type="checkbox" name="perm" value="employees" class="rounded bg-slate-900"> Employee Master (Payroll)</label>
-              <label class="flex items-center gap-2"><input type="checkbox" name="perm" value="products" class="rounded bg-slate-900"> Product Master (Accounts)</label>
-              <label class="flex items-center gap-2"><input type="checkbox" name="perm" value="sales" class="rounded bg-slate-900"> Sales Ledger & Export</label>
-              <label class="flex items-center gap-2"><input type="checkbox" name="perm" value="users" class="rounded bg-slate-900"> User & Access Control</label>
-              <label class="flex items-center gap-2"><input type="checkbox" name="perm" value="history" class="rounded bg-slate-900"> User Audit History</label>
+            <label class="block text-xs uppercase font-bold text-slate-400 mb-2.5">Form / Tab Permissions:</label>
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-2 text-xs">
+              <label class="flex items-center gap-2.5 p-2 rounded-lg bg-slate-900/60 border border-slate-700/60 cursor-pointer">
+                <input type="checkbox" name="perm" value="pos" checked class="w-4 h-4 rounded accent-emerald-500">
+                <span>POS Billing Counter</span>
+              </label>
+              <label class="flex items-center gap-2.5 p-2 rounded-lg bg-slate-900/60 border border-slate-700/60 cursor-pointer">
+                <input type="checkbox" name="perm" value="employees" class="w-4 h-4 rounded accent-emerald-500">
+                <span>Employee Master (Payroll)</span>
+              </label>
+              <label class="flex items-center gap-2.5 p-2 rounded-lg bg-slate-900/60 border border-slate-700/60 cursor-pointer">
+                <input type="checkbox" name="perm" value="products" class="w-4 h-4 rounded accent-emerald-500">
+                <span>Product Master (Accounts)</span>
+              </label>
+              <label class="flex items-center gap-2.5 p-2 rounded-lg bg-slate-900/60 border border-slate-700/60 cursor-pointer">
+                <input type="checkbox" name="perm" value="sales" class="w-4 h-4 rounded accent-emerald-500">
+                <span>Sales Ledger & Export</span>
+              </label>
+              <label class="flex items-center gap-2.5 p-2 rounded-lg bg-slate-900/60 border border-slate-700/60 cursor-pointer">
+                <input type="checkbox" name="perm" value="users" class="w-4 h-4 rounded accent-emerald-500">
+                <span>User & Access Control</span>
+              </label>
+              <label class="flex items-center gap-2.5 p-2 rounded-lg bg-slate-900/60 border border-slate-700/60 cursor-pointer">
+                <input type="checkbox" name="perm" value="history" class="w-4 h-4 rounded accent-emerald-500">
+                <span>User Audit History</span>
+              </label>
             </div>
           </div>
-          <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded mt-2">Save User</button>
+          <button type="submit" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-lg mt-2 transition">Save User</button>
         </form>
       </section>
-      <section class="col-span-12 lg:col-span-7 bg-slate-800 rounded-lg border border-slate-700 p-5">
+
+      <section class="lg:col-span-7 bg-slate-800 rounded-xl border border-slate-700 p-4 sm:p-5 overflow-hidden">
         <h2 class="text-base font-bold mb-4">System Users List</h2>
-        <div class="overflow-x-auto"><table class="w-full text-left border-collapse text-sm">
-          <thead><tr class="border-b border-slate-700 text-slate-400 text-xs uppercase"><th class="py-2">Username</th><th class="py-2">Role</th><th class="py-2">Allowed Forms</th><th class="py-2 text-center">Action</th></tr></thead>
-          <tbody id="userTableBody" class="divide-y divide-slate-700/60"></tbody>
-        </table></div>
+        <div class="overflow-x-auto custom-scrollbar rounded-lg border border-slate-700/60">
+          <table class="w-full text-left border-collapse text-xs sm:text-sm min-w-[480px]">
+            <thead class="bg-slate-900/80">
+              <tr class="border-b border-slate-700 text-slate-400 text-[11px] uppercase">
+                <th class="py-2.5 px-3">Username</th>
+                <th class="py-2.5 px-3">Role</th>
+                <th class="py-2.5 px-3">Allowed Forms</th>
+                <th class="py-2.5 px-3 text-center">Action</th>
+              </tr>
+            </thead>
+            <tbody id="userTableBody" class="divide-y divide-slate-700/60"></tbody>
+          </table>
+        </div>
       </section>
     </main>
 
     <!-- TAB 6: USER AUDIT HISTORY -->
-    <main id="view-history" class="tab-view hidden flex-1 p-4 space-y-4">
-      <div class="bg-slate-800 p-4 rounded-lg border border-slate-700 flex justify-between items-center">
+    <main id="view-history" class="tab-view hidden flex-1 p-3 sm:p-4 lg:p-6 space-y-4">
+      <div class="bg-slate-800 p-4 sm:p-5 rounded-xl border border-slate-700 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
         <div>
           <h2 class="text-base font-bold">System Activity & User Audit History</h2>
           <p class="text-xs text-slate-400">Tracks who added, updated, or deleted records</p>
         </div>
-        <div class="flex gap-2">
-          <button onclick="exportHistoryCSV()" class="bg-emerald-600 hover:bg-emerald-500 px-3 py-1.5 rounded text-xs font-bold text-white">📥 Export Audit Logs to Excel</button>
-          <button onclick="loadHistory()" class="bg-slate-700 hover:bg-slate-600 px-3 py-1.5 rounded text-xs font-bold">Refresh</button>
+        <div class="flex flex-wrap w-full sm:w-auto gap-2">
+          <button onclick="exportHistoryCSV()" class="flex-1 sm:flex-none bg-emerald-600 hover:bg-emerald-500 px-3.5 py-2 rounded-lg text-xs font-bold text-white transition">
+            📥 Export Audit Logs
+          </button>
+          <button onclick="loadHistory()" class="flex-1 sm:flex-none bg-slate-700 hover:bg-slate-600 px-3.5 py-2 rounded-lg text-xs font-bold text-slate-200 transition">
+            🔄 Refresh
+          </button>
         </div>
       </div>
-      <div class="bg-slate-800 p-5 rounded-lg border border-slate-700">
-        <div class="overflow-x-auto"><table class="w-full text-left border-collapse text-sm">
-          <thead><tr class="border-b border-slate-700 text-slate-400 text-xs uppercase"><th class="py-2">Timestamp</th><th class="py-2">Username</th><th class="py-2">Action</th><th class="py-2">Details</th></tr></thead>
-          <tbody id="historyTableBody" class="divide-y divide-slate-700/60"></tbody>
-        </table></div>
+      <div class="bg-slate-800 p-4 sm:p-5 rounded-xl border border-slate-700 overflow-hidden">
+        <div class="overflow-x-auto custom-scrollbar rounded-lg border border-slate-700/60">
+          <table class="w-full text-left border-collapse text-xs sm:text-sm min-w-[560px]">
+            <thead class="bg-slate-900/80">
+              <tr class="border-b border-slate-700 text-slate-400 text-[11px] uppercase">
+                <th class="py-2.5 px-3">Timestamp</th>
+                <th class="py-2.5 px-3">Username</th>
+                <th class="py-2.5 px-3">Action</th>
+                <th class="py-2.5 px-3">Details</th>
+              </tr>
+            </thead>
+            <tbody id="historyTableBody" class="divide-y divide-slate-700/60"></tbody>
+          </table>
+        </div>
       </div>
     </main>
   </div>
 
   <!-- RECEIPT MODAL -->
-  <div id="receiptModal" class="hidden fixed inset-0 bg-black/75 flex items-center justify-center z-50">
-    <div class="bg-white text-black p-6 rounded shadow-lg w-80 font-mono text-xs">
-      <div class="text-center border-b border-dashed border-black pb-2 mb-2">
-        <h2 class="font-bold text-sm">FACTORY FAIR PRICE SHOP</h2>
-        <p id="rcptDate"></p><p id="rcptInv"></p>
+  <div id="receiptModal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div id="receiptPrintCard" class="bg-white text-black p-5 sm:p-6 rounded-xl shadow-2xl w-full max-w-xs font-mono text-xs">
+      <div class="text-center border-b border-dashed border-black pb-2.5 mb-2.5">
+        <h2 class="font-bold text-sm tracking-tight">FACTORY FAIR PRICE SHOP</h2>
+        <p id="rcptDate" class="text-[11px] text-neutral-700 mt-0.5"></p>
+        <p id="rcptInv" class="font-bold mt-0.5"></p>
       </div>
-      <div class="border-b border-dashed border-black pb-2 mb-2">
+      <div class="border-b border-dashed border-black pb-2.5 mb-2.5 space-y-0.5">
         <p><strong>Emp ID:</strong> <span id="rcptEmpId"></span></p>
         <p><strong>Name:</strong> <span id="rcptEmpName"></span></p>
       </div>
-      <div id="rcptItems" class="space-y-1 border-b border-dashed border-black pb-2 mb-2"></div>
-      <div class="flex justify-between font-bold text-sm mb-4"><span>TOTAL:</span><span id="rcptTotal"></span></div>
-      <div class="flex gap-2">
-        <button onclick="window.print()" class="flex-1 bg-emerald-600 text-white py-1 rounded">Print</button>
-        <button onclick="document.getElementById('receiptModal').classList.add('hidden')" class="flex-1 bg-slate-800 text-white py-1 rounded">Close</button>
+      <div id="rcptItems" class="space-y-1 border-b border-dashed border-black pb-2.5 mb-2.5 max-h-48 overflow-y-auto"></div>
+      <div class="flex justify-between font-bold text-sm mb-4">
+        <span>TOTAL:</span>
+        <span id="rcptTotal"></span>
+      </div>
+      <div class="flex gap-2 no-print">
+        <button onclick="window.print()" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-sans font-bold py-2 rounded-lg transition">Print</button>
+        <button onclick="document.getElementById('receiptModal').classList.add('hidden')" class="flex-1 bg-slate-800 hover:bg-slate-700 text-white font-sans font-bold py-2 rounded-lg transition">Close</button>
       </div>
     </div>
   </div>
@@ -294,6 +522,49 @@
       users: "5. User Access Control",
       history: "6. Audit History"
     };
+
+    // Custom non-blocking Toast Notification (replaces alert)
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      const colorMap = {
+        success: 'bg-emerald-900/95 border-emerald-500 text-emerald-100',
+        error: 'bg-rose-900/95 border-rose-500 text-rose-100',
+        info: 'bg-slate-800/95 border-slate-600 text-slate-100'
+      };
+      toast.className = `pointer-events-auto border-l-4 px-4 py-3 rounded-lg shadow-xl text-xs sm:text-sm font-medium flex items-center justify-between gap-3 transition-all duration-300 ${colorMap[type] || colorMap.info}`;
+      toast.innerHTML = `
+        <span>${message}</span>
+        <button onclick="this.parentElement.remove()" class="text-current opacity-70 hover:opacity-100 font-bold text-base leading-none">&times;</button>
+      `;
+      container.appendChild(toast);
+      setTimeout(() => {
+        if (toast.parentElement) toast.remove();
+      }, 3500);
+    }
+
+    // Custom Confirmation Modal (replaces confirm)
+    function showConfirmModal(title, message, onConfirm) {
+      const modal = document.getElementById('confirmModal');
+      document.getElementById('confirmTitle').innerText = title;
+      document.getElementById('confirmMessage').innerText = message;
+      modal.classList.remove('hidden');
+
+      const cancelBtn = document.getElementById('confirmCancelBtn');
+      const okBtn = document.getElementById('confirmOkBtn');
+
+      const cleanup = () => {
+        modal.classList.add('hidden');
+        cancelBtn.onclick = null;
+        okBtn.onclick = null;
+      };
+
+      cancelBtn.onclick = cleanup;
+      okBtn.onclick = () => {
+        cleanup();
+        onConfirm();
+      };
+    }
 
     window.initializeAppReady = function() {
       const fb = window.dbRefs;
@@ -323,7 +594,13 @@
       onValue(ref(db, 'employees'), (snap) => { 
         employees = snap.val() || {}; 
         populateDropdowns(); 
-        renderEmployeesTable(); 
+        renderEmployeesTable();
+        // Keep currentPosEmp synced if updated
+        if (currentPosEmp && currentPosEmp.empKey && employees[currentPosEmp.empKey]) {
+          const k = currentPosEmp.empKey;
+          currentPosEmp = { ...employees[k], empKey: k };
+          renderPosState();
+        }
       });
 
       onValue(ref(db, 'products'), (snap) => { 
@@ -348,18 +625,23 @@
       const u = document.getElementById('loginUser').value.trim();
       const p = document.getElementById('loginPass').value.trim();
 
-      const snap = await get(child(ref(db), `users/${u}`));
-      if (snap.exists() && snap.val().password === p) {
-        currentUser = snap.val();
-        currentUser.username = u;
-        document.getElementById('loginModal').classList.add('hidden');
-        document.getElementById('appContainer').classList.remove('hidden');
-        document.getElementById('loggedUserName').innerText = currentUser.username;
-        document.getElementById('loggedUserRole').innerText = currentUser.role;
-        setupNavigation();
-        logAction('LOGIN', `User ${currentUser.username} logged in.`);
-      } else {
-        alert('Invalid username or password!');
+      try {
+        const snap = await get(child(ref(db), `users/${u}`));
+        if (snap.exists() && snap.val().password === p) {
+          currentUser = snap.val();
+          currentUser.username = u;
+          document.getElementById('loginModal').classList.add('hidden');
+          document.getElementById('appContainer').classList.remove('hidden');
+          document.getElementById('loggedUserName').innerText = currentUser.username;
+          document.getElementById('loggedUserRole').innerText = currentUser.role;
+          setupNavigation();
+          logAction('LOGIN', `User ${currentUser.username} logged in.`);
+          showToast(`Welcome back, ${currentUser.username}!`, 'success');
+        } else {
+          showToast('Invalid username or password!', 'error');
+        }
+      } catch (err) {
+        showToast('Error connecting to database. Please try again.', 'error');
       }
     }
 
@@ -367,6 +649,7 @@
       currentUser = null;
       document.getElementById('appContainer').classList.add('hidden');
       document.getElementById('loginModal').classList.remove('hidden');
+      showToast('Signed out successfully.', 'info');
     }
 
     function setupNavigation() {
@@ -378,7 +661,7 @@
       Object.keys(tabNames).forEach(tabKey => {
         if (currentUser.role === 'admin' || perms[tabKey]) {
           if (!firstTab) firstTab = tabKey;
-          nav.innerHTML += `<button onclick="switchTab('${tabKey}')" id="tab-${tabKey}" class="px-4 py-2 rounded text-sm font-semibold bg-slate-700 text-slate-300">${tabNames[tabKey]}</button>`;
+          nav.innerHTML += `<button onclick="switchTab('${tabKey}')" id="tab-${tabKey}" class="whitespace-nowrap px-3.5 py-2 rounded-lg text-xs sm:text-sm font-semibold bg-slate-700 text-slate-300 transition shrink-0">${tabNames[tabKey]}</button>`;
         }
       });
       if (firstTab) switchTab(firstTab);
@@ -386,12 +669,16 @@
 
     function switchTab(tab) {
       document.querySelectorAll('.tab-view').forEach(v => v.classList.add('hidden'));
-      document.querySelectorAll('#navTabs button').forEach(b => b.className = 'px-4 py-2 rounded text-sm font-semibold bg-slate-700 text-slate-300');
+      document.querySelectorAll('#navTabs button').forEach(b => {
+        b.className = 'whitespace-nowrap px-3.5 py-2 rounded-lg text-xs sm:text-sm font-semibold bg-slate-700/80 hover:bg-slate-700 text-slate-300 transition shrink-0';
+      });
       
       const view = document.getElementById('view-' + tab);
       if (view) view.classList.remove('hidden');
       const btn = document.getElementById('tab-' + tab);
-      if (btn) btn.className = 'px-4 py-2 rounded text-sm font-semibold bg-emerald-600 text-white';
+      if (btn) {
+        btn.className = 'whitespace-nowrap px-3.5 py-2 rounded-lg text-xs sm:text-sm font-semibold bg-emerald-600 text-white shadow transition shrink-0';
+      }
       if (tab === 'history') loadHistory();
     }
 
@@ -405,16 +692,18 @@
       });
     }
 
-    // POS LOGIC (Debugged for Firebase Keys)
+    // POS LOGIC
     function populateDropdowns() {
       const empSel = document.getElementById('posEmpDropdown');
       if (empSel) {
+        const currentVal = empSel.value;
         empSel.innerHTML = '<option value="">-- Or Pick Employee From List --</option>';
         Object.keys(employees).forEach(key => {
           const e = employees[key];
           const avail = (e.gross_salary * 0.30) - (e.spent || 0);
           empSel.innerHTML += `<option value="${key}">${e.id} - ${e.name} (Avail: ৳${avail.toFixed(0)})</option>`;
         });
+        if (currentVal && employees[currentVal]) empSel.value = currentVal;
       }
       const prodSel = document.getElementById('posProductSelect');
       if (prodSel) {
@@ -428,77 +717,142 @@
 
     function lookupPosEmployee() {
       const inputId = document.getElementById('posEmpInput').value.trim().toUpperCase();
+      if (!inputId) return showToast('Please enter an Employee ID!', 'error');
       let foundKey = null;
       Object.keys(employees).forEach(k => { 
         if (employees[k].id && employees[k].id.toUpperCase() === inputId) foundKey = k; 
       });
-      if (!foundKey) return alert('Employee ID not found in database!');
-      currentPosEmp = employees[foundKey];
-      currentPosEmp.empKey = foundKey;
+      if (!foundKey) return showToast('Employee ID not found in database!', 'error');
+      currentPosEmp = { ...employees[foundKey], empKey: foundKey };
       document.getElementById('posEmpDropdown').value = foundKey;
       renderPosState();
+      showToast(`Loaded employee: ${currentPosEmp.name}`, 'success');
     }
 
     function selectPosEmployeeDropdown(key) {
       if (!key) return;
-      currentPosEmp = employees[key];
-      currentPosEmp.empKey = key;
+      currentPosEmp = { ...employees[key], empKey: key };
       document.getElementById('posEmpInput').value = currentPosEmp.id;
       renderPosState();
     }
 
     function addSelectedProduct() {
       const key = document.getElementById('posProductSelect').value;
-      if (key) addProductToCart(key);
+      if (!key) return showToast('Please select a product from the list first.', 'error');
+      addProductToCart(key);
     }
 
     function scanBarcode() {
       const code = document.getElementById('posBarcodeInput').value.trim();
+      if (!code) return;
       let foundKey = null;
       Object.keys(products).forEach(k => { 
         if (products[k].barcode === code) foundKey = k; 
       });
-      if (foundKey) { addProductToCart(foundKey); document.getElementById('posBarcodeInput').value = ''; }
-      else alert('Barcode not found!');
+      if (foundKey) {
+        addProductToCart(foundKey);
+        document.getElementById('posBarcodeInput').value = '';
+      } else {
+        showToast('Barcode not found!', 'error');
+      }
     }
 
     function addProductToCart(prodKey) {
-      if (!currentPosEmp) return alert('Load Employee ID first!');
+      if (!currentPosEmp) return showToast('Load Employee ID first before adding items!', 'error');
       const prod = products[prodKey];
       const existing = posCart.find(c => c.prodKey === prodKey);
       const nextQty = (existing ? existing.qty : 0) + 1;
-      if (nextQty > prod.stock) return alert(`Insufficient stock! Available: ${prod.stock}`);
+      if (nextQty > prod.stock) return showToast(`Insufficient stock! Available: ${prod.stock}`, 'error');
       if (existing) existing.qty += 1;
       else posCart.push({ prodKey, barcode: prod.barcode, name: prod.name, price: Number(prod.price), qty: 1 });
       renderPosState();
+    }
+
+    function changeCartQty(index, delta) {
+      const item = posCart[index];
+      if (!item) return;
+      const prod = products[item.prodKey];
+      const newQty = item.qty + delta;
+      if (newQty <= 0) {
+        posCart.splice(index, 1);
+      } else if (prod && newQty > prod.stock) {
+        return showToast(`Max available stock (${prod.stock}) reached!`, 'error');
+      } else {
+        item.qty = newQty;
+      }
+      renderPosState();
+    }
+
+    function clearPosCart() {
+      posCart = [];
+      renderPosState();
+      showToast('Cart cleared.', 'info');
     }
 
     function renderPosState() {
       const tbody = document.getElementById('posCartBody');
       tbody.innerHTML = '';
       let cartTotal = 0;
-      posCart.forEach((item, i) => {
-        const sub = item.price * item.qty;
-        cartTotal += sub;
-        tbody.innerHTML += `<tr><td class="py-2">${i+1}</td><td class="py-2 font-mono text-xs">${item.barcode}</td><td class="py-2">${item.name}</td><td class="py-2">৳${item.price}</td><td class="py-2 text-center">${item.qty}</td><td class="py-2 text-right">৳${sub}</td><td class="py-2 text-center"><button onclick="posCart.splice(${i},1);renderPosState()" class="text-rose-400 text-xs">Remove</button></td></tr>`;
-      });
+
+      if (posCart.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" class="py-8 text-center text-slate-500 text-xs sm:text-sm">No items in cart yet. Scan barcode or select a product above.</td></tr>`;
+      } else {
+        posCart.forEach((item, i) => {
+          const sub = item.price * item.qty;
+          cartTotal += sub;
+          tbody.innerHTML += `
+            <tr class="hover:bg-slate-700/30">
+              <td class="py-2.5 px-3">${i + 1}</td>
+              <td class="py-2.5 px-3 font-mono text-xs text-slate-300">${item.barcode}</td>
+              <td class="py-2.5 px-3 font-medium text-white">${item.name}</td>
+              <td class="py-2.5 px-3">৳${item.price}</td>
+              <td class="py-2.5 px-3 text-center">
+                <div class="inline-flex items-center gap-1.5 bg-slate-900 border border-slate-700 rounded-lg px-1.5 py-0.5">
+                  <button onclick="changeCartQty(${i}, -1)" class="w-5 h-5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs">-</button>
+                  <span class="px-1.5 font-mono text-xs">${item.qty}</span>
+                  <button onclick="changeCartQty(${i}, 1)" class="w-5 h-5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs">+</button>
+                </div>
+              </td>
+              <td class="py-2.5 px-3 text-right font-semibold">৳${sub.toFixed(2)}</td>
+              <td class="py-2.5 px-3 text-center">
+                <button onclick="posCart.splice(${i},1);renderPosState()" class="bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 px-2.5 py-1 rounded text-xs font-semibold transition">Remove</button>
+              </td>
+            </tr>`;
+        });
+      }
+
       document.getElementById('posCartTotal').innerText = `৳ ${cartTotal.toFixed(2)}`;
       
       if (!currentPosEmp) {
         document.getElementById('posEmpName').innerText = 'No Employee Loaded';
         document.getElementById('posEmpMeta').innerText = '30% limit verification pending';
+        document.getElementById('posStatusText').innerText = 'Scan Employee ID to begin billing.';
+        document.getElementById('posCheckoutBtn').disabled = true;
         return;
       }
 
       document.getElementById('posEmpName').innerText = `${currentPosEmp.name} (${currentPosEmp.id})`;
-      document.getElementById('posEmpMeta').innerText = `Dept: ${currentPosEmp.dept} • Gross Salary: ৳${currentPosEmp.gross_salary.toFixed(2)}`;
+      document.getElementById('posEmpMeta').innerText = `Dept: ${currentPosEmp.dept} • Gross Salary: ৳${Number(currentPosEmp.gross_salary).toFixed(2)}`;
 
       const spent = currentPosEmp.spent || 0;
       const maxLimit = currentPosEmp.gross_salary * 0.30;
       const rem = (maxLimit - spent) - cartTotal;
+
       document.getElementById('meterLimit').innerText = `৳ ${maxLimit.toFixed(2)}`;
       document.getElementById('meterSpent').innerText = `- ৳ ${spent.toFixed(2)}`;
-      document.getElementById('meterRemaining').innerText = `৳ ${rem.toFixed(2)}`;
+      
+      const remEl = document.getElementById('meterRemaining');
+      remEl.innerText = `৳ ${rem.toFixed(2)}`;
+      remEl.className = rem < 0 ? 'text-xl sm:text-2xl font-mono text-rose-400' : 'text-xl sm:text-2xl font-mono text-emerald-400';
+
+      if (rem < 0) {
+        document.getElementById('posStatusText').innerText = '⚠️ Credit limit exceeded! Reduce items to checkout.';
+        document.getElementById('posStatusText').className = 'text-xs sm:text-sm font-semibold text-rose-400';
+      } else {
+        document.getElementById('posStatusText').innerText = `Ready to bill ${currentPosEmp.name}.`;
+        document.getElementById('posStatusText').className = 'text-xs sm:text-sm font-semibold text-emerald-400';
+      }
+
       document.getElementById('posCheckoutBtn').disabled = rem < 0 || posCart.length === 0;
     }
 
@@ -525,14 +879,27 @@
 
       logAction('CHECKOUT', `Invoice ${invNo} generated for Emp ${currentPosEmp.id} amounting ৳${cartTotal}`);
 
+      // Populate Receipt Modal
       document.getElementById('rcptDate').innerText = new Date().toLocaleString();
       document.getElementById('rcptInv').innerText = `Invoice: ${invNo}`;
       document.getElementById('rcptEmpId').innerText = currentPosEmp.id;
       document.getElementById('rcptEmpName').innerText = currentPosEmp.name;
+      
+      const rcptItemsEl = document.getElementById('rcptItems');
+      rcptItemsEl.innerHTML = posCart.map(i => `
+        <div class="flex justify-between">
+          <span>${i.name} x${i.qty}</span>
+          <span>৳${(i.price * i.qty).toFixed(2)}</span>
+        </div>
+      `).join('');
+
       document.getElementById('rcptTotal').innerText = `৳ ${cartTotal.toFixed(2)}`;
       document.getElementById('receiptModal').classList.remove('hidden');
+
       posCart = [];
+      currentPosEmp.spent = newSpent;
       renderPosState();
+      showToast(`Invoice ${invNo} completed!`, 'success');
     }
 
     // SALES LEDGER & EXCEL EXPORT
@@ -540,15 +907,28 @@
       const tbody = document.getElementById('salesTableBody');
       if (!tbody) return;
       tbody.innerHTML = '';
-      Object.keys(sales).forEach(key => {
+      const keys = Object.keys(sales);
+      if (keys.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" class="py-8 text-center text-slate-500">No sales invoices recorded yet.</td></tr>`;
+        return;
+      }
+      keys.reverse().forEach(key => {
         const s = sales[key];
-        tbody.innerHTML += `<tr><td class="py-2.5 font-mono text-emerald-400">${s.invoiceNo}</td><td class="py-2.5 text-xs text-slate-400">${s.date}</td><td class="py-2.5 font-mono">${s.empId}</td><td class="py-2.5">${s.empName}</td><td class="py-2.5 text-xs text-slate-300">${s.items}</td><td class="py-2.5 text-right font-bold">৳${Number(s.total).toFixed(2)}</td></tr>`;
+        tbody.innerHTML += `
+          <tr class="hover:bg-slate-700/30">
+            <td class="py-2.5 px-3 font-mono text-emerald-400 whitespace-nowrap">${s.invoiceNo}</td>
+            <td class="py-2.5 px-3 text-xs text-slate-400 whitespace-nowrap">${s.date}</td>
+            <td class="py-2.5 px-3 font-mono whitespace-nowrap">${s.empId}</td>
+            <td class="py-2.5 px-3 font-medium">${s.empName}</td>
+            <td class="py-2.5 px-3 text-xs text-slate-300">${s.items}</td>
+            <td class="py-2.5 px-3 text-right font-bold whitespace-nowrap">৳${Number(s.total).toFixed(2)}</td>
+          </tr>`;
       });
     }
 
     function exportSalesCSV() {
       const salesKeys = Object.keys(sales);
-      if (salesKeys.length === 0) return alert('No sales records available to export!');
+      if (salesKeys.length === 0) return showToast('No sales records available to export!', 'error');
       
       let csv = 'InvoiceNo,DateTime,EmpID,EmployeeName,Items,TotalBDT\n';
       salesKeys.forEach(k => {
@@ -563,6 +943,7 @@
       a.href = url;
       a.download = `FairShop_Sales_Report_${new Date().toISOString().slice(0,10)}.csv`;
       a.click();
+      showToast('Sales report exported!', 'success');
     }
 
     // EMPLOYEE CRUD
@@ -572,11 +953,14 @@
       const name = document.getElementById('empName').value.trim();
       const dept = document.getElementById('empDept').value.trim();
       const salary = parseFloat(document.getElementById('empSalary').value);
-      const key = document.getElementById('empKey').value || push(ref(db, 'employees')).key;
+      const existingKey = document.getElementById('empKey').value;
+      const key = existingKey || push(ref(db, 'employees')).key;
+      const existingSpent = (existingKey && employees[existingKey]) ? (employees[existingKey].spent || 0) : 0;
 
-      await set(ref(db, `employees/${key}`), { id, name, dept, gross_salary: salary, spent: 0 });
+      await set(ref(db, `employees/${key}`), { id, name, dept, gross_salary: salary, spent: existingSpent });
       logAction('EMPLOYEE_SAVE', `Employee ${id} (${name}) saved by ${currentUser.username}`);
       resetEmpForm();
+      showToast(`Employee ${name} saved successfully!`, 'success');
     }
 
     function editEmployee(key) {
@@ -586,13 +970,16 @@
       document.getElementById('empName').value = e.name;
       document.getElementById('empDept').value = e.dept;
       document.getElementById('empSalary').value = e.gross_salary;
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
-    async function deleteEmployee(key) {
-      if (confirm('Delete employee?')) {
+    function deleteEmployee(key) {
+      const emp = employees[key];
+      showConfirmModal('Delete Employee', `Are you sure you want to delete ${emp ? emp.name : 'this employee'}?`, async () => {
         await remove(ref(db, `employees/${key}`));
         logAction('EMPLOYEE_DELETE', `Employee deleted by ${currentUser.username}`);
-      }
+        showToast('Employee deleted.', 'info');
+      });
     }
 
     function resetEmpForm() {
@@ -609,7 +996,20 @@
       tbody.innerHTML = '';
       Object.keys(employees).forEach(key => {
         const e = employees[key];
-        tbody.innerHTML += `<tr><td class="py-2.5 font-mono">${e.id}</td><td class="py-2.5">${e.name}<br><small class="text-slate-400">${e.dept}</small></td><td class="py-2.5 text-right">৳${e.gross_salary}</td><td class="py-2.5 text-right">৳${(e.gross_salary*0.3).toFixed(2)}</td><td class="py-2.5 text-center space-x-2"><button onclick="editEmployee('${key}')" class="text-sky-400 text-xs">Edit</button><button onclick="deleteEmployee('${key}')" class="text-rose-400 text-xs">Delete</button></td></tr>`;
+        tbody.innerHTML += `
+          <tr class="hover:bg-slate-700/30">
+            <td class="py-2.5 px-3 font-mono whitespace-nowrap">${e.id}</td>
+            <td class="py-2.5 px-3">
+              <div class="font-medium text-white">${e.name}</div>
+              <div class="text-xs text-slate-400">${e.dept}</div>
+            </td>
+            <td class="py-2.5 px-3 text-right font-mono whitespace-nowrap">৳${e.gross_salary}</td>
+            <td class="py-2.5 px-3 text-right font-mono text-emerald-400 whitespace-nowrap">৳${(e.gross_salary*0.3).toFixed(2)}</td>
+            <td class="py-2.5 px-3 text-center whitespace-nowrap space-x-1.5">
+              <button onclick="editEmployee('${key}')" class="bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 px-2.5 py-1 rounded text-xs font-semibold transition">Edit</button>
+              <button onclick="deleteEmployee('${key}')" class="bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 px-2.5 py-1 rounded text-xs font-semibold transition">Delete</button>
+            </td>
+          </tr>`;
       });
     }
 
@@ -627,6 +1027,7 @@
       await set(ref(db, `products/${key}`), { barcode, name, price, stock });
       logAction('PRODUCT_SAVE', `Product ${name} (${barcode}) updated/added by ${currentUser.username}`);
       resetProdForm();
+      showToast(`Product "${name}" saved!`, 'success');
     }
 
     function editProduct(key) {
@@ -635,13 +1036,16 @@
       document.getElementById('prodName').value = p.name;
       document.getElementById('prodPrice').value = p.price;
       document.getElementById('prodStock').value = p.stock;
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
-    async function deleteProduct(key) {
-      if (confirm('Delete product?')) {
+    function deleteProduct(key) {
+      const prod = products[key];
+      showConfirmModal('Delete Product', `Are you sure you want to delete "${prod ? prod.name : 'this product'}"?`, async () => {
         await remove(ref(db, `products/${key}`));
         logAction('PRODUCT_DELETE', `Product deleted by ${currentUser.username}`);
-      }
+        showToast('Product deleted.', 'info');
+      });
     }
 
     function resetProdForm() {
@@ -657,7 +1061,17 @@
       tbody.innerHTML = '';
       Object.keys(products).forEach(key => {
         const p = products[key];
-        tbody.innerHTML += `<tr><td class="py-2.5 font-mono">${p.barcode}</td><td class="py-2.5">${p.name}</td><td class="py-2.5 text-right">৳${p.price}</td><td class="py-2.5 text-center">${p.stock}</td><td class="py-2.5 text-center space-x-2"><button onclick="editProduct('${key}')" class="text-sky-400 text-xs">Edit</button><button onclick="deleteProduct('${key}')" class="text-rose-400 text-xs">Delete</button></td></tr>`;
+        tbody.innerHTML += `
+          <tr class="hover:bg-slate-700/30">
+            <td class="py-2.5 px-3 font-mono whitespace-nowrap">${p.barcode}</td>
+            <td class="py-2.5 px-3 font-medium text-white">${p.name}</td>
+            <td class="py-2.5 px-3 text-right font-mono whitespace-nowrap">৳${p.price}</td>
+            <td class="py-2.5 px-3 text-center font-mono">${p.stock}</td>
+            <td class="py-2.5 px-3 text-center whitespace-nowrap space-x-1.5">
+              <button onclick="editProduct('${key}')" class="bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 px-2.5 py-1 rounded text-xs font-semibold transition">Edit</button>
+              <button onclick="deleteProduct('${key}')" class="bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 px-2.5 py-1 rounded text-xs font-semibold transition">Delete</button>
+            </td>
+          </tr>`;
       });
     }
 
@@ -672,7 +1086,7 @@
 
       await set(ref(db, `users/${username}`), { username, password, role, permissions });
       logAction('USER_SAVE', `User account ${username} created/updated with role ${role}`);
-      alert('User saved successfully!');
+      showToast(`User "${username}" saved successfully!`, 'success');
     }
 
     function renderUsersTable() {
@@ -682,16 +1096,25 @@
       Object.keys(users).forEach(u => {
         const usr = users[u];
         const allowed = Object.keys(usr.permissions || {}).join(', ');
-        tbody.innerHTML += `<tr><td class="py-2.5 font-mono">${usr.username}</td><td class="py-2.5 uppercase font-semibold text-emerald-400">${usr.role}</td><td class="py-2.5 text-xs text-slate-300">${allowed}</td><td class="py-2.5 text-center"><button onclick="removeUser('${u}')" class="text-rose-400 text-xs">Remove</button></td></tr>`;
+        tbody.innerHTML += `
+          <tr class="hover:bg-slate-700/30">
+            <td class="py-2.5 px-3 font-mono whitespace-nowrap">${usr.username}</td>
+            <td class="py-2.5 px-3 uppercase font-semibold text-emerald-400 whitespace-nowrap">${usr.role}</td>
+            <td class="py-2.5 px-3 text-xs text-slate-300">${allowed || 'All (Admin)'}</td>
+            <td class="py-2.5 px-3 text-center whitespace-nowrap">
+              <button onclick="removeUser('${u}')" class="bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 px-2.5 py-1 rounded text-xs font-semibold transition">Remove</button>
+            </td>
+          </tr>`;
       });
     }
 
-    async function removeUser(username) {
-      if (username === 'admin') return alert('Cannot remove default admin!');
-      if (confirm(`Remove user ${username}?`)) {
+    function removeUser(username) {
+      if (username === 'admin') return showToast('Cannot remove default admin!', 'error');
+      showConfirmModal('Remove User', `Are you sure you want to remove user "${username}"?`, async () => {
         await remove(ref(db, `users/${username}`));
         logAction('USER_DELETE', `User ${username} removed by ${currentUser.username}`);
-      }
+        showToast(`User "${username}" removed.`, 'info');
+      });
     }
 
     // AUDIT HISTORY & EXCEL EXPORT
@@ -702,13 +1125,23 @@
       
       const tbody = document.getElementById('historyTableBody');
       tbody.innerHTML = '';
+      if (auditLogsCache.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="4" class="py-8 text-center text-slate-500">No audit history logs recorded yet.</td></tr>`;
+        return;
+      }
       auditLogsCache.forEach(l => {
-        tbody.innerHTML += `<tr><td class="py-2 text-xs text-slate-400">${l.timestamp}</td><td class="py-2 font-mono text-sky-400">${l.username}</td><td class="py-2 font-semibold">${l.action}</td><td class="py-2 text-xs text-slate-300">${l.details}</td></tr>`;
+        tbody.innerHTML += `
+          <tr class="hover:bg-slate-700/30">
+            <td class="py-2.5 px-3 text-xs text-slate-400 whitespace-nowrap">${l.timestamp}</td>
+            <td class="py-2.5 px-3 font-mono text-sky-400 whitespace-nowrap">${l.username}</td>
+            <td class="py-2.5 px-3 font-semibold whitespace-nowrap">${l.action}</td>
+            <td class="py-2.5 px-3 text-xs text-slate-300">${l.details}</td>
+          </tr>`;
       });
     }
 
     function exportHistoryCSV() {
-      if (auditLogsCache.length === 0) return alert('No history logs available to export!');
+      if (auditLogsCache.length === 0) return showToast('No history logs available to export!', 'error');
       
       let csv = 'Timestamp,Username,Action,Details\n';
       auditLogsCache.forEach(l => {
@@ -722,6 +1155,7 @@
       a.href = url;
       a.download = `FairShop_Audit_History_${new Date().toISOString().slice(0,10)}.csv`;
       a.click();
+      showToast('Audit history exported!', 'success');
     }
   </script>
 </body>
